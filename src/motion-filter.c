@@ -167,7 +167,7 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 
 	if (filter->motion_reverse){
 
-		obs_sceneitem_t* item = get_item(filter->context, filter->item_id);
+		obs_sceneitem_t* item = get_item(filter->context, item_id);
 
 		if (filter->restart_backward){
 			obs_sceneitem_set_pos(item, &filter->org_pos);
