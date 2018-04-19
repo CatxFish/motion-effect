@@ -94,7 +94,7 @@ static bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
 static const char *motion_filter_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return obs_module_text("Motion");
+	return T_("Motion");
 }
 
 static bool motion_init(void *data, bool forward)
@@ -118,7 +118,6 @@ static bool motion_init(void *data, bool forward)
 			filter->org_pos.y = info.pos.y;
 			filter->org_scale.x = info.scale.x;
 			filter->org_scale.y = info.scale.y;
-			filter->motion_reverse = false;
 		}
 
 		filter->elapsed_time = 0.0f;
@@ -131,24 +130,18 @@ static bool motion_init(void *data, bool forward)
 static bool hotkey_forward(void *data, obs_hotkey_pair_id id,
 	obs_hotkey_t *hotkey, bool pressed)
 {
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+	UNUSED_PARAMETER(pressed);
 	return motion_init(data, true);
 }
 
 static bool hotkey_backward(void *data, obs_hotkey_pair_id id,
 	obs_hotkey_t *hotkey, bool pressed)
 {
-	return motion_init(data, false);
-}
-
-static bool motion_forward(obs_properties_t *props, obs_property_t *p,
-	void *data)
-{
-	return motion_init(data, true);
-}
-
-static bool motion_backward(obs_properties_t *props, obs_property_t *p,
-	void *data)
-{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+	UNUSED_PARAMETER(pressed);
 	return motion_init(data, false);
 }
 
@@ -221,6 +214,48 @@ static bool motion_init_hot_key(void *data)
 	return true;
 }
 
+static bool motion_set_button(obs_properties_t *props, obs_property_t *p,
+	bool reversed)
+{
+	obs_property_t* f = obs_properties_get(props, S_FORWARD);
+	obs_property_t* b = obs_properties_get(props, S_BACKWARD);
+	obs_property_set_visible(f, !reversed);
+	obs_property_set_visible(b, reversed);
+
+	UNUSED_PARAMETER(p);
+	return true;
+}
+
+static bool forward_clicked(obs_properties_t *props, obs_property_t *p,
+	void *data)
+{
+	if (motion_init(data, true))
+		return motion_set_button(props, p, true);
+	else
+		return false;
+}
+
+static bool backward_clicked(obs_properties_t *props, obs_property_t *p,
+	void *data)
+{
+	if (motion_init(data, false))
+		return motion_set_button(props, p, false);
+	else
+		return false;
+}
+
+static bool source_changed(obs_properties_t *props, obs_property_t *p,
+	obs_data_t *s)
+{
+	bool reversed = obs_data_get_bool(s, S_IS_REVERSED);
+	obs_property_t* f = obs_properties_get(props, S_FORWARD);
+	obs_property_t* b = obs_properties_get(props, S_BACKWARD);
+	if (obs_property_visible(f) && obs_property_visible(b))
+		return motion_set_button(props, p, reversed);
+	else
+		return motion_set_button(props, p, false);
+}
+
 static bool motion_list_source(obs_scene_t* scene,
 	obs_sceneitem_t* item, void* p)
 {
@@ -229,6 +264,7 @@ static bool motion_list_source(obs_scene_t* scene,
 	const char* name = obs_source_get_name(source);
 	int64_t id = obs_sceneitem_get_id(item);
 	obs_property_list_add_int(p, name, id);
+	UNUSED_PARAMETER(scene);
 	return true;
 }
 
@@ -256,16 +292,22 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_properties_t *props = obs_properties_create();
 	obs_property_t* p;
 
+	obs_data_t *settings = obs_source_get_settings(filter->context);
+
 	obs_source_t* source = obs_filter_get_parent(filter->context);
 	obs_scene_t* scene = obs_scene_from_source(source);
 
-	if (scene){
-		p = obs_properties_add_list(props, S_SOURCE, T_SOURCE,
-			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-		obs_scene_enum_items(scene, motion_list_source, (void*)p);
-	}
-	else
+	if (!scene)
 		return props;
+
+	obs_data_set_bool(settings, S_IS_REVERSED, filter->motion_reverse);
+
+	p = obs_properties_add_list(props, S_SOURCE, T_SOURCE,
+		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	
+	obs_scene_enum_items(scene, motion_list_source, (void*)p);
+
+	obs_property_set_modified_callback(p, source_changed);
 
 	p = obs_properties_add_list(props, S_PATH_TYPE, T_PATH_TYPE,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
@@ -288,8 +330,8 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_properties_add_float_slider(props, S_DURATION, T_DURATION, 0, 5, 
 		0.1);
 
-	obs_properties_add_button(props, S_FORWARD, T_FORWARD, motion_forward);
-	obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, motion_backward);
+	obs_properties_add_button(props, S_FORWARD, T_FORWARD, forward_clicked);
+	obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, backward_clicked);
 
 	return props;
 }
@@ -375,8 +417,6 @@ static void motion_filter_tick(void *data, float seconds)
 
 	if (!filter->hotkey_init)
 		motion_init_hot_key(data);
-
-	UNUSED_PARAMETER(seconds);
 }
 
 static void motion_filter_save(void *data, obs_data_t *settings)
@@ -421,6 +461,7 @@ static void motion_filter_remove(void *data, obs_source_t *source)
 		obs_sceneitem_set_scale(filter->item, &filter->org_scale);
 		filter->motion_reverse = false;
 	}
+	UNUSED_PARAMETER(source);
 }
 
 static void motion_filter_destroy(void *data)
@@ -433,10 +474,10 @@ static void motion_filter_destroy(void *data)
 }
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("motion_filter", "en-US")
+OBS_MODULE_USE_DEFAULT_LOCALE("motion-filter", "en-US")
 
 struct obs_source_info motion_filter = {
-	.id = "motion_filter",
+	.id = "motion-filter",
 	.type = OBS_SOURCE_TYPE_FILTER,
 	.output_flags = OBS_SOURCE_VIDEO,
 	.get_name = motion_filter_get_name,
