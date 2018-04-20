@@ -1,70 +1,70 @@
 #include <obs-module.h>
 #include <obs-hotkey.h>
 
-#define	N_PATH_LINEAR		0
-#define N_PATH_QUADRATIC	1
-#define N_PATH_CUBIC		2
+#define	N_PATH_LINEAR       0
+#define N_PATH_QUADRATIC    1
+#define N_PATH_CUBIC        2
 
-#define S_IS_REVERSED		"is_revesed"
-#define S_ORG_X				"org_x"
-#define S_ORG_Y				"org_y"
-#define S_ORG_SCALE_X		"org_scale_x"
-#define S_ORG_SCALE_Y		"org_scale_y"
-#define S_PATH_TYPE			"path_type"
-#define S_CTRL_X			"ctrl_x"
-#define S_CTRL_Y			"ctrl_y"
-#define S_CTRL2_X			"ctrl2_x"
-#define S_CTRL2_Y			"ctrl2_y"
-#define S_DST_X				"dst_x"
-#define S_DST_Y				"dst_y"
-#define S_DST_W				"dst_width"
-#define S_DST_H				"dst_height"
-#define	S_DURATION			"duration"
-#define S_SOURCE			"source_id"
-#define S_FORWARD			"forward"
-#define S_BACKWARD			"backward"
+#define S_IS_REVERSED       "is_revesed"
+#define S_ORG_X             "org_x"
+#define S_ORG_Y             "org_y"
+#define S_ORG_SCALE_X       "org_scale_x"
+#define S_ORG_SCALE_Y       "org_scale_y"
+#define S_PATH_TYPE         "path_type"
+#define S_CTRL_X            "ctrl_x"
+#define S_CTRL_Y            "ctrl_y"
+#define S_CTRL2_X           "ctrl2_x"
+#define S_CTRL2_Y           "ctrl2_y"
+#define S_DST_X             "dst_x"
+#define S_DST_Y             "dst_y"
+#define S_DST_W             "dst_width"
+#define S_DST_H             "dst_height"
+#define	S_DURATION          "duration"
+#define S_SOURCE            "source_id"
+#define S_FORWARD           "forward"
+#define S_BACKWARD          "backward"
 
 #define T_(v)               obs_module_text(v)
-#define T_PATH_TYPE			T_("PathType")
-#define	T_PATH_LINEAR		T_("PathType.Linear")
-#define T_PATH_QUADRATIC	T_("PathType.Quadratic")
-#define T_PATH_CUBIC		T_("PathType.Cubic")
-#define T_CTRL_X			T_("ControlPoint.X")
-#define T_CTRL_Y			T_("ControlPoint.Y")
-#define T_CTRL2_X			T_("ControlPoint2.X")
-#define T_CTRL2_Y			T_("ControlPoint2.Y")
-#define T_DST_X				T_("Destination.X")
-#define T_DST_Y				T_("Destination.Y")
-#define T_DST_W				T_("Destination.W")
-#define T_DST_H				T_("Destination.H")
-#define T_DURATION			T_("Duration")
-#define T_SOURCE			T_("SourceName")
-#define T_FORWARD			T_("Forward")
-#define T_BACKWARD			T_("Backward")
+#define T_PATH_TYPE         T_("PathType")
+#define	T_PATH_LINEAR       T_("PathType.Linear")
+#define T_PATH_QUADRATIC    T_("PathType.Quadratic")
+#define T_PATH_CUBIC        T_("PathType.Cubic")
+#define T_CTRL_X            T_("ControlPoint.X")
+#define T_CTRL_Y            T_("ControlPoint.Y")
+#define T_CTRL2_X           T_("ControlPoint2.X")
+#define T_CTRL2_Y           T_("ControlPoint2.Y")
+#define T_DST_X             T_("Destination.X")
+#define T_DST_Y             T_("Destination.Y")
+#define T_DST_W             T_("Destination.W")
+#define T_DST_H             T_("Destination.H")
+#define T_DURATION          T_("Duration")
+#define T_SOURCE            T_("SourceName")
+#define T_FORWARD           T_("Forward")
+#define T_BACKWARD          T_("Backward")
 
 struct motion_filter_data {
-	obs_source_t		*context;
-	obs_scene_t			*scene;
-	obs_sceneitem_t		*item;
+	obs_source_t        *context;
+	obs_scene_t         *scene;
+	obs_sceneitem_t     *item;
 	obs_hotkey_pair_id  hotkey_pair;
-	bool				hotkey_init;
-	bool				restart_backward;
-	bool				motion_start;
-	bool				motion_reverse;
-	int					path_type;
-	int					dst_width;
-	int					dst_height;
-	struct vec2			org_pos;
-	struct vec2			ctrl_pos;
-	struct vec2			ctrl2_pos;
-	struct vec2			dst_pos;
-	struct vec2			org_scale;
-	struct vec2			dst_scale;
-	struct vec2			position;
-	struct vec2			scale;
-	float				duration;
-	float				elapsed_time;
-	int64_t				item_id;
+	bool                hotkey_init;
+	bool                restart_backward;
+	bool                motion_start;
+	bool                motion_reverse;
+	int                 path_type;
+	int                 dst_width;
+	int                 dst_height;
+	struct vec2         org_pos;
+	struct vec2         ctrl_pos;
+	struct vec2         ctrl2_pos;
+	struct vec2         dst_pos;
+	struct vec2         org_scale;
+	struct vec2         dst_scale;
+	struct vec2         position;
+	struct vec2         scale;
+	float               duration;
+	float               elapsed_time;
+	int64_t             item_id;
 
 };
 
