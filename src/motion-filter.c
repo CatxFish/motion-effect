@@ -1,5 +1,6 @@
 #include <obs-module.h>
 #include <obs-hotkey.h>
+#include <util/dstr.h>
 
 #define	N_PATH_LINEAR       0
 #define N_PATH_QUADRATIC    1
@@ -41,6 +42,7 @@
 #define T_SOURCE            T_("SourceName")
 #define T_FORWARD           T_("Forward")
 #define T_BACKWARD          T_("Backward")
+#define T_DISABLED          T_("Disabled")
 
 struct motion_filter_data {
 	obs_source_t        *context;
@@ -205,9 +207,23 @@ static bool motion_init_hot_key(void *data)
 	obs_scene_t* scene = obs_scene_from_source(source);
 
 	if (scene){
-		filter->hotkey_pair = obs_hotkey_pair_register_source(filter->context,
-			S_FORWARD, T_FORWARD, S_BACKWARD, T_BACKWARD,
+
+		struct dstr foward_str = { 0 };
+		struct dstr backward_str = { 0 };
+
+		dstr_copy(&foward_str, T_FORWARD);
+		dstr_copy(&backward_str, T_BACKWARD);
+		dstr_cat(&foward_str, " [ %1 ] ");
+		dstr_cat(&backward_str, " [ %1 ] ");
+		dstr_replace(&foward_str, "%1",name);
+		dstr_replace(&backward_str, "%1",name);
+
+		filter->hotkey_pair = obs_hotkey_pair_register_source(source,
+			S_FORWARD, foward_str.array, S_BACKWARD, backward_str.array,
 			hotkey_forward, hotkey_backward, filter, filter);
+
+		dstr_free(&foward_str);
+		dstr_free(&backward_str);
 	}
 
 	filter->hotkey_init = true;
@@ -293,7 +309,6 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_t* p;
 
 	obs_data_t *settings = obs_source_get_settings(filter->context);
-
 	obs_source_t* source = obs_filter_get_parent(filter->context);
 	obs_scene_t* scene = obs_scene_from_source(source);
 
@@ -303,19 +318,23 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_data_set_bool(settings, S_IS_REVERSED, filter->motion_reverse);
 
 	p = obs_properties_add_list(props, S_SOURCE, T_SOURCE,
-		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-	
-	obs_scene_enum_items(scene, motion_list_source, (void*)p);
+		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);	
 
+	struct dstr disable_str = { 0 };
+	dstr_copy(&disable_str, "--- ");
+	dstr_cat(&disable_str, T_DISABLED);
+	dstr_cat(&disable_str, " ---");
+	obs_property_list_add_int(p, disable_str.array, -1);
+	dstr_free(&disable_str);
+
+	obs_scene_enum_items(scene, motion_list_source, (void*)p);
 	obs_property_set_modified_callback(p, source_changed);
 
 	p = obs_properties_add_list(props, S_PATH_TYPE, T_PATH_TYPE,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-
 	obs_property_list_add_int(p, T_PATH_LINEAR, N_PATH_LINEAR);
 	obs_property_list_add_int(p, T_PATH_QUADRATIC, N_PATH_QUADRATIC);
 	obs_property_list_add_int(p, T_PATH_CUBIC, N_PATH_CUBIC);
-
 	obs_property_set_modified_callback(p, path_type_changed);
 
 	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
@@ -339,6 +358,7 @@ static obs_properties_t *motion_filter_properties(void *data)
 static void motion_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_bool(settings, S_IS_REVERSED, false);
+	obs_data_set_default_int(settings, S_SOURCE, -1);
 	obs_data_set_default_int(settings, S_DST_W, 300);
 	obs_data_set_default_int(settings, S_DST_H, 300);
 	obs_data_set_default_double(settings, S_DURATION, 1.0);
