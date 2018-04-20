@@ -1,8 +1,9 @@
 # motion-filter
 Motion-filter is an obs-studio filter plugin for source item animation by updating transform settings.
 # Features
-- Source animation (linear or bezier curve)
-- Trigger by hothey
+- Source animation with moving(linear or bezier curve) and scaling.
+- Forward direction and backward direction animation.
+- Trigger by hothey 
 # Download
 See [Release Page](https://github.com/CatxFish/motion-filter/releases)
 # Screenshots
