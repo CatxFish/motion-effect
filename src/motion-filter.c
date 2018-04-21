@@ -218,9 +218,12 @@ static bool motion_init_hot_key(void *data)
 		dstr_replace(&foward_str, "%1",name);
 		dstr_replace(&backward_str, "%1",name);
 
+		const char* foward = foward_str.array;
+		const char* backward = backward_str.array;
+		
 		filter->hotkey_pair = obs_hotkey_pair_register_source(source,
-			S_FORWARD, foward_str.array, S_BACKWARD, backward_str.array,
-			hotkey_forward, hotkey_backward, filter, filter);
+			foward, foward, backward, backward, hotkey_forward,
+			hotkey_backward, filter, filter);
 
 		dstr_free(&foward_str);
 		dstr_free(&backward_str);
