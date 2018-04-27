@@ -2,6 +2,9 @@
 #include <obs-hotkey.h>
 #include <util/dstr.h>
 
+#define N_START_SOURCE      0
+#define N_START_FIXED       1
+
 #define	N_PATH_LINEAR       0
 #define N_PATH_QUADRATIC    1
 #define N_PATH_CUBIC        2
@@ -9,27 +12,35 @@
 #define S_IS_REVERSED       "is_revesed"
 #define S_ORG_X             "org_x"
 #define S_ORG_Y             "org_y"
-#define S_ORG_SCALE_X       "org_scale_x"
-#define S_ORG_SCALE_Y       "org_scale_y"
+#define S_ORG_W             "org_w"
+#define S_ORG_H             "org_h"
 #define S_PATH_TYPE         "path_type"
+#define S_START_TYPE		"start_type"
 #define S_CTRL_X            "ctrl_x"
 #define S_CTRL_Y            "ctrl_y"
 #define S_CTRL2_X           "ctrl2_x"
 #define S_CTRL2_Y           "ctrl2_y"
 #define S_DST_X             "dst_x"
 #define S_DST_Y             "dst_y"
-#define S_DST_W             "dst_width"
-#define S_DST_H             "dst_height"
+#define S_DST_W             "dst_w"
+#define S_DST_H             "dst_h"
 #define	S_DURATION          "duration"
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
 
 #define T_(v)               obs_module_text(v)
+#define T_START_SOURCE      T_("Start.SourcePosition")
+#define T_START_FIXED       T_("Start.FixedPosition")
 #define T_PATH_TYPE         T_("PathType")
+#define T_START_TYPE		T_("StartType")
 #define	T_PATH_LINEAR       T_("PathType.Linear")
 #define T_PATH_QUADRATIC    T_("PathType.Quadratic")
 #define T_PATH_CUBIC        T_("PathType.Cubic")
+#define T_ORG_X             T_("Start.X")
+#define T_ORG_Y             T_("Start.Y")
+#define T_ORG_W             T_("Start.W")
+#define T_ORG_H             T_("Start.H")
 #define T_CTRL_X            T_("ControlPoint.X")
 #define T_CTRL_Y            T_("ControlPoint.Y")
 #define T_CTRL2_X           T_("ControlPoint2.X")
@@ -54,6 +65,9 @@ struct motion_filter_data {
 	bool                motion_start;
 	bool                motion_reverse;
 	int                 path_type;
+	int                 start_type;
+	int                 org_width;
+	int                 org_height;
 	int                 dst_width;
 	int                 dst_height;
 	struct vec2         org_pos;
@@ -77,20 +91,43 @@ static inline obs_sceneitem_t* get_item(obs_source_t* context,int64_t id)
 	return obs_scene_find_sceneitem_by_id(scene, id);
 }
 
-static bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
-	int width, int height)
+static bool cal_size(obs_sceneitem_t* item, float sx, float sy,
+	int* width, int* height)
 {
 	obs_source_t* item_source = obs_sceneitem_get_source(item);
-	int base_width = obs_source_get_base_width(item_source);
-	int base_height = obs_source_get_base_height(item_source);
+	int base_width = obs_source_get_width(item_source);
+	int base_height = obs_source_get_height(item_source);
 
 	if (base_width == 0 || base_height == 0)
 		return false;
 
-	*sx = (float)width / base_width;
-	*sy = (float)height / base_height;
+	*width = base_width * sx;
+	*height = base_width * sy;
 
 	return true;
+}
+
+static bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
+	int width, int height)
+{
+	obs_source_t* item_source = obs_sceneitem_get_source(item);
+	int base_width = obs_source_get_width(item_source);
+	int base_height = obs_source_get_height(item_source);
+
+	if (base_width == 0 || base_height == 0)
+		return false;
+
+	*sx = (float)width / width;
+	*sy = (float)height / height;
+
+	return true;
+}
+
+static inline void set_item_scale(obs_sceneitem_t* item, int width, int height)
+{
+	struct vec2 scale;
+	if (cal_scale(item, &scale.x, &scale.y, width, height))
+		obs_sceneitem_set_scale(item, &scale);
 }
 
 static const char *motion_filter_get_name(void *unused)
@@ -102,6 +139,10 @@ static const char *motion_filter_get_name(void *unused)
 static bool motion_init(void *data, bool forward)
 {
 	struct motion_filter_data *filter = data;
+	
+	if (filter->motion_reverse == forward)
+		return false;
+
 	filter->item = get_item(filter->context, filter->item_id);
 
 	if (filter->item){
@@ -110,16 +151,17 @@ static bool motion_init(void *data, bool forward)
 		if (!cal_scale(filter->item, &filter->dst_scale.x,
 			&filter->dst_scale.y, filter->dst_width, filter->dst_height))
 			return false;
-		else
-			obs_sceneitem_get_info(filter->item, &info);
 
-		if (filter->motion_reverse == forward)
-			return false;
-		else if (!filter->motion_reverse){
+		if (filter->start_type == N_START_SOURCE && !filter->motion_reverse){
+			obs_sceneitem_get_info(filter->item, &info);
 			filter->org_pos.x = info.pos.x;
 			filter->org_pos.y = info.pos.y;
 			filter->org_scale.x = info.scale.x;
 			filter->org_scale.y = info.scale.y;
+		}
+		else if (filter->start_type == N_START_FIXED){
+			cal_scale(filter->item, &filter->org_scale.x,
+				&filter->org_scale.y, filter->org_width, filter->org_width);
 		}
 
 		filter->elapsed_time = 0.0f;
@@ -155,7 +197,12 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	int height;
 	int item_id;
 
+	filter->start_type = (int)obs_data_get_int(settings, S_START_TYPE);
 	filter->path_type = (int)obs_data_get_int(settings, S_PATH_TYPE);
+	filter->org_pos.x = (float)obs_data_get_int(settings, S_ORG_X);
+	filter->org_pos.y = (float)obs_data_get_int(settings, S_ORG_Y);
+	filter->org_width = (int)obs_data_get_int(settings, S_ORG_W);
+	filter->org_height = (int)obs_data_get_int(settings, S_ORG_H);
 	filter->ctrl_pos.x = (float)obs_data_get_int(settings, S_CTRL_X);
 	filter->ctrl_pos.y = (float)obs_data_get_int(settings, S_CTRL_Y);
 	filter->ctrl2_pos.x = (float)obs_data_get_int(settings, S_CTRL2_X);
@@ -167,13 +214,14 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	width = (int)obs_data_get_int(settings, S_DST_W);
 	height = (int)obs_data_get_int(settings, S_DST_H);
 
-	if (filter->motion_reverse){
 
+
+	if (filter->motion_reverse){
 		obs_sceneitem_t* item = get_item(filter->context, item_id);
 
 		if (filter->restart_backward){
 			obs_sceneitem_set_pos(item, &filter->org_pos);
-			obs_sceneitem_set_scale(item, &filter->org_scale);
+			set_item_scale(item, filter->org_width, filter->org_height);
 			filter->motion_reverse = false;
 			filter->restart_backward = false;
 		}
@@ -182,14 +230,10 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 			obs_sceneitem_set_scale(filter->item, &filter->org_scale);
 			filter->motion_reverse = false;
 		} 
-		else if (pos.x != filter->dst_pos.x || pos.y != filter->dst_pos.y){
+		else if (pos.x != filter->dst_pos.x || pos.y != filter->dst_pos.y)
 			obs_sceneitem_set_pos(item, &pos);
-		} 
-		else if (width != filter->dst_width || height != filter->dst_height){
-			struct vec2	scale;
-			if (cal_scale(item, &scale.x, &scale.y, width, height))
-				obs_sceneitem_set_scale(item, &scale);
-		}
+		else if (width != filter->dst_width || height != filter->dst_height)
+			set_item_scale(item, width, height);
 	}
 
 	filter->dst_pos.x = pos.x;
@@ -287,20 +331,31 @@ static bool motion_list_source(obs_scene_t* scene,
 	return true;
 }
 
-#define set_vis(var, val, type) \
+#define set_vis(var, val, cmp) \
 		do { \
 			p = obs_properties_get(props, val); \
-			obs_property_set_visible(p, var >= type);\
+			obs_property_set_visible(p, var >= cmp);\
 		} while (false)
+
+static bool start_type_changed(obs_properties_t *props, obs_property_t *p,
+	obs_data_t *s)
+{
+	int type = (int)obs_data_get_int(s, S_START_TYPE);
+	set_vis(type, S_ORG_X, N_START_FIXED);
+	set_vis(type, S_ORG_Y, N_START_FIXED);
+	set_vis(type, S_ORG_W, N_START_FIXED);
+	set_vis(type, S_ORG_H, N_START_FIXED);
+	return true;
+}
 
 static bool path_type_changed(obs_properties_t *props, obs_property_t *p,
 	obs_data_t *s)
 {
-	int path_type = (int)obs_data_get_int(s, S_PATH_TYPE);
-	set_vis(path_type, S_CTRL_X, N_PATH_QUADRATIC);
-	set_vis(path_type, S_CTRL_Y, N_PATH_QUADRATIC);
-	set_vis(path_type, S_CTRL2_X, N_PATH_CUBIC);
-	set_vis(path_type, S_CTRL2_Y, N_PATH_CUBIC);
+	int type = (int)obs_data_get_int(s, S_PATH_TYPE);
+	set_vis(type, S_CTRL_X, N_PATH_QUADRATIC);
+	set_vis(type, S_CTRL_Y, N_PATH_QUADRATIC);
+	set_vis(type, S_CTRL2_X, N_PATH_CUBIC);
+	set_vis(type, S_CTRL2_Y, N_PATH_CUBIC);
 	return true;
 }
 
@@ -333,6 +388,17 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_scene_enum_items(scene, motion_list_source, (void*)p);
 	obs_property_set_modified_callback(p, source_changed);
 
+	p = obs_properties_add_list(props, S_START_TYPE, T_START_TYPE,
+		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(p, T_START_SOURCE, N_START_SOURCE);
+	obs_property_list_add_int(p, T_START_FIXED, N_START_FIXED);
+	obs_property_set_modified_callback(p, start_type_changed);
+
+	obs_properties_add_int(props, S_ORG_X, T_ORG_X, 0, 8192, 1);
+	obs_properties_add_int(props, S_ORG_Y, T_ORG_Y, 0, 8192, 1);
+	obs_properties_add_int(props, S_ORG_W, T_ORG_W, 0, 8192, 1);
+	obs_properties_add_int(props, S_ORG_H, T_ORG_H, 0, 8192, 1);
+
 	p = obs_properties_add_list(props, S_PATH_TYPE, T_PATH_TYPE,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(p, T_PATH_LINEAR, N_PATH_LINEAR);
@@ -362,6 +428,8 @@ static void motion_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_bool(settings, S_IS_REVERSED, false);
 	obs_data_set_default_int(settings, S_SOURCE, -1);
+	obs_data_set_default_int(settings, S_ORG_W, 300);
+	obs_data_set_default_int(settings, S_ORG_H, 300);
 	obs_data_set_default_int(settings, S_DST_W, 300);
 	obs_data_set_default_int(settings, S_DST_H, 300);
 	obs_data_set_default_double(settings, S_DURATION, 1.0);
@@ -433,9 +501,8 @@ static void motion_filter_tick(void *data, float seconds)
 			filter->motion_reverse = !filter->motion_reverse;
 			filter->elapsed_time = 0.0f;
 		}
-		else{
+		else
 			filter->elapsed_time += seconds;
-		}
 	}
 
 	if (!filter->hotkey_init)
@@ -446,12 +513,6 @@ static void motion_filter_save(void *data, obs_data_t *settings)
 {
 	struct motion_filter_data *filter = data;
 	obs_data_set_bool(settings, S_IS_REVERSED, filter->motion_reverse);
-	if (filter->motion_reverse){
-		obs_data_set_double(settings, S_ORG_X, filter->org_pos.x);
-		obs_data_set_double(settings, S_ORG_Y, filter->org_pos.y);
-		obs_data_set_double(settings, S_ORG_SCALE_X, filter->org_scale.x);
-		obs_data_set_double(settings, S_ORG_SCALE_Y, filter->org_scale.y);
-	}
 }
 
 static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
@@ -463,15 +524,6 @@ static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
 	filter->hotkey_init = false;
 	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
 	filter->restart_backward = filter->motion_reverse;
-	if (filter->motion_reverse){
-		filter->org_pos.x = (float)obs_data_get_double(settings, S_ORG_X);
-		filter->org_pos.y = (float)obs_data_get_double(settings, S_ORG_Y);
-		filter->org_scale.x = (float)obs_data_get_double(settings,
-			S_ORG_SCALE_X);
-		filter->org_scale.y = (float)obs_data_get_double(settings,
-			S_ORG_SCALE_Y);
-	}
-
 	obs_source_update(context, settings);
 	return filter;
 }
