@@ -24,8 +24,6 @@
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
-#define S_HOTKEY_FORWARD    "hotkey_forward"
-#define S_HOTKEY_BACKWARD   "hotkey_backward"
 
 #define T_(v)               obs_module_text(v)
 #define T_PATH_TYPE         T_("PathType")
@@ -57,6 +55,7 @@ struct motion_filter_data {
 	obs_sceneitem_t     *item;
 	obs_hotkey_id		hotkey_id_f;
 	obs_hotkey_id       hotkey_id_b;
+	bool                round_trip;
 	bool                hotkey_init;
 	bool                restart_backward;
 	bool                motion_start;
@@ -154,6 +153,12 @@ static const char *motion_filter_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
 	return T_("Motion");
+}
+
+static const char *motion_filter_round_get_name(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+	return T_("RoundTripMotion");
 }
 
 static bool motion_init(void *data, bool forward)
@@ -282,59 +287,54 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	filter->item_id = item_id;
 }
 
-static bool init_hot_key(void *data)
+static void register_hothey(struct motion_filter_data *filter, const char *type,
+	const char *text, obs_source_t *source, obs_hotkey_func func)
+{
+	const char *name = obs_source_get_name(filter->context);
+	const char *s_name = obs_source_get_name(source);
+	obs_data_t *settings = obs_source_get_settings(filter->context);
+	obs_data_array_t *save_array;
+	struct dstr str = { 0 };
+	dstr_copy(&str, text);
+	dstr_cat(&str, " [ %1 ] ");
+	dstr_replace(&str, "%1", name);
+	const char *description = str.array;
+	obs_hotkey_id id;
+
+	if (s_name)
+		id = obs_hotkey_register_source(source,description, description, 
+		func, filter);
+	else
+		id = obs_hotkey_register_frontend(description, description, func, 
+		filter);
+
+	if (strcmp(type, S_FORWARD) == 0)
+		filter->hotkey_id_f = id;
+	else
+		filter->hotkey_id_b = id;
+
+	save_array = obs_data_get_array(settings, type);
+	obs_hotkey_load(id, save_array);
+	obs_data_array_release(save_array);
+	dstr_free(&str);
+	obs_data_release(settings);
+}
+
+static bool init_hotkey(void *data)
 {
 	struct motion_filter_data *filter = data;
-	const char *name = obs_source_get_name(filter->context);
 	obs_source_t *source = obs_filter_get_parent(filter->context);
 	obs_scene_t *scene = obs_scene_from_source(source);
-	const char *s_name = obs_source_get_name(source);
-
-	if (scene){
-
-		obs_data_t *settings = obs_source_get_settings(filter->context);
-		obs_data_array_t *save_array;
-		struct dstr foward_str = { 0 };
-		struct dstr backward_str = { 0 };
-		dstr_copy(&foward_str, T_FORWARD);
-		dstr_copy(&backward_str, T_BACKWARD);
-		dstr_cat(&foward_str, " [ %1 ] ");
-		dstr_cat(&backward_str, " [ %1 ] ");
-		dstr_replace(&foward_str, "%1", name);
-		dstr_replace(&backward_str, "%1", name);
-
-		const char *foward = foward_str.array;
-		const char *backward = backward_str.array;
-
-		if (s_name){
-			filter->hotkey_id_f = obs_hotkey_register_source(source,
-				foward, foward, hotkey_forward, filter);
-
-			filter->hotkey_id_b = obs_hotkey_register_source(source,
-				backward, backward, hotkey_backward, filter);
-		}
-		else{
-			filter->hotkey_id_f = obs_hotkey_register_frontend(foward, 
-				foward, hotkey_forward, filter);
-
-			filter->hotkey_id_b = obs_hotkey_register_frontend(backward,
-				backward, hotkey_backward, filter);
-		}
-
-		save_array = obs_data_get_array(settings, S_HOTKEY_FORWARD);
-		obs_hotkey_load(filter->hotkey_id_f, save_array);
-		obs_data_array_release(save_array);
-
-		save_array = obs_data_get_array(settings, S_HOTKEY_BACKWARD);
-		obs_hotkey_load(filter->hotkey_id_b, save_array);
-		obs_data_array_release(save_array);
-
-		dstr_free(&foward_str);
-		dstr_free(&backward_str);
-		obs_data_release(settings);
-	}
-
 	filter->hotkey_init = true;
+
+	if (!scene)
+		return false;
+
+	register_hothey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
+
+	if (filter->round_trip)
+		register_hothey(filter, S_BACKWARD, T_BACKWARD, source, hotkey_backward);
+		
 	return true;
 }
 
@@ -353,7 +353,8 @@ static bool motion_set_button(obs_properties_t *props, obs_property_t *p,
 static bool forward_clicked(obs_properties_t *props, obs_property_t *p,
 	void *data)
 {
-	if (motion_init(data, true))
+	struct motion_filter_data *filter = data;
+	if (motion_init(data, true) && filter->round_trip)
 		return motion_set_button(props, p, true);
 	else
 		return false;
@@ -472,7 +473,9 @@ static obs_properties_t *motion_filter_properties(void *data)
 		0.1);
 
 	obs_properties_add_button(props, S_FORWARD, T_FORWARD, forward_clicked);
-	obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, backward_clicked);
+
+	if (filter->round_trip)
+		obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, backward_clicked);
 
 	return props;
 }
@@ -551,17 +554,19 @@ static void motion_filter_tick(void *data, float seconds)
 
 		if (filter->elapsed_time >= filter->duration){
 			filter->motion_start = false;
-			filter->motion_reverse = !filter->motion_reverse;
 			filter->elapsed_time = 0.0f;
 			obs_sceneitem_release(filter->item);
-			set_reverse_info(filter);
+			if (filter->round_trip){
+				filter->motion_reverse = !filter->motion_reverse;
+				set_reverse_info(filter);
+			}
 		}
 		else
 			filter->elapsed_time += seconds;
 	}
 
 	if (!filter->hotkey_init)
-		init_hot_key(data);
+		init_hotkey(data);
 }
 
 static void motion_filter_save(void *data, obs_data_t *settings)
@@ -569,8 +574,8 @@ static void motion_filter_save(void *data, obs_data_t *settings)
 	struct motion_filter_data *filter = data;
 	obs_data_array_t* array_f = obs_hotkey_save(filter->hotkey_id_f);
 	obs_data_array_t* array_b = obs_hotkey_save(filter->hotkey_id_b);
-	obs_data_set_array(settings, S_HOTKEY_FORWARD, array_f);
-	obs_data_set_array(settings, S_HOTKEY_BACKWARD, array_b);
+	obs_data_set_array(settings, S_FORWARD, array_f);
+	obs_data_set_array(settings, S_BACKWARD, array_b);
 	obs_data_array_release(array_f);
 	obs_data_array_release(array_b);
 }
@@ -582,6 +587,22 @@ static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
 	filter->context = context;
 	filter->motion_start = false;
 	filter->hotkey_init = false;
+	filter->round_trip = false;
+	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
+	filter->restart_backward = filter->motion_reverse;
+	obs_source_update(context, settings);
+	return filter;
+}
+
+static void *motion_filter_round_create(obs_data_t *settings, 
+	obs_source_t *context)
+{
+	struct motion_filter_data *filter = bzalloc(sizeof(*filter));
+
+	filter->context = context;
+	filter->motion_start = false;
+	filter->hotkey_init = false;
+	filter->round_trip = true;
 	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
 	filter->restart_backward = filter->motion_reverse;
 	obs_source_update(context, settings);
@@ -605,7 +626,7 @@ static void motion_filter_destroy(void *data)
 	if (filter->hotkey_id_f)
 		obs_hotkey_unregister(filter->hotkey_id_f);
 
-	if (filter->hotkey_id_b)
+	if (filter->hotkey_id_b && filter->round_trip)
 		obs_hotkey_unregister(filter->hotkey_id_b);
 
 	bfree(filter->item_name);
@@ -630,7 +651,23 @@ struct obs_source_info motion_filter = {
 	.filter_remove = motion_filter_remove
 };
 
+struct obs_source_info round_trip_motion_filter = {
+	.id = "round-motion-filter",
+	.type = OBS_SOURCE_TYPE_FILTER,
+	.output_flags = OBS_SOURCE_VIDEO,
+	.get_name = motion_filter_round_get_name,
+	.create = motion_filter_round_create,
+	.destroy = motion_filter_destroy,
+	.update = motion_filter_update,
+	.get_properties = motion_filter_properties,
+	.get_defaults = motion_filter_defaults,
+	.video_tick = motion_filter_tick,
+	.save = motion_filter_save,
+	.filter_remove = motion_filter_remove
+};
+
 bool obs_module_load(void) {
 	obs_register_source(&motion_filter);
+	obs_register_source(&round_trip_motion_filter);
 	return true;
 }
