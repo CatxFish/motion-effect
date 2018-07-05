@@ -26,6 +26,7 @@
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
+#define S_USE_CURRENT_POS	"use_cur_pos"
 
 #define T_(v)               obs_module_text(v)
 #define T_PATH_TYPE         T_("PathType")
@@ -52,6 +53,7 @@
 #define T_FORWARD           T_("Forward")
 #define T_BACKWARD          T_("Backward")
 #define T_DISABLED          T_("Disabled")
+#define T_USE_CURRENT_POS	T_("UseCurrentPosition")
 
 struct motion_filter_data {
 	obs_source_t        *context;
@@ -446,6 +448,28 @@ static bool scale_use_changed(obs_properties_t *props, obs_property_t *p,
 	return true;
 }
 
+static bool use_current_pos_clicked(obs_properties_t *props, obs_property_t *p,
+	void *data)
+{
+	struct motion_filter_data *filter = data;
+	obs_sceneitem_t *item = get_item(filter->context, filter->item_name);
+
+	if (!filter->item)
+		item = get_item_by_id(filter, filter->item_id);
+
+	if (item) {
+		struct obs_transform_info info;
+		obs_sceneitem_get_info(item, &info);
+		/*p = obs_properties_get(props, S_ORG_X);*/
+		obs_data_t *settings = obs_source_get_settings(filter->context);
+		obs_data_set_double(settings, S_ORG_X, info.pos.x);
+		obs_data_set_double(settings, S_ORG_Y, info.pos.y);
+		obs_data_release(settings);
+	}
+
+	return true;
+}
+
 #undef set_vis
 
 static obs_properties_t *motion_filter_properties(void *data)
@@ -478,6 +502,8 @@ static obs_properties_t *motion_filter_properties(void *data)
 
 	obs_properties_add_int(props, S_ORG_X, T_ORG_X, 0, 8192, 1);
 	obs_properties_add_int(props, S_ORG_Y, T_ORG_Y, 0, 8192, 1);
+
+	obs_properties_add_button(props, S_USE_CURRENT_POS, T_USE_CURRENT_POS, use_current_pos_clicked);
 
 	p = obs_properties_add_bool(props, S_START_SCALE, T_START_SCALE);
 	obs_property_set_modified_callback(p, start_scale_changed);
