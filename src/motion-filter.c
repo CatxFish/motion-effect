@@ -47,7 +47,7 @@
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
-#define S_DEST_GRAB_POS		"use_cur_src_pos"
+#define S_DEST_GRAB_POS     "use_cur_src_pos"
 
 // Define property localisation tags
 #define T_(v)               obs_module_text(v)
@@ -75,7 +75,7 @@
 #define T_FORWARD           T_("Forward")
 #define T_BACKWARD          T_("Backward")
 #define T_DISABLED          T_("Disabled")
-#define T_DEST_GRAB_POS		T_("DestinationGrabPosition")
+#define T_DEST_GRAB_POS     T_("DestinationGrabPosition")
 
 struct motion_filter_data {
 	obs_source_t        *context;
@@ -462,8 +462,8 @@ static bool path_type_changed(obs_properties_t *props, obs_property_t *p,
 	return true;
 }
 
-static bool provide_start_position_toggle_changed(obs_properties_t *props, obs_property_t *p,
-	obs_data_t *s)
+static bool provide_start_position_toggle_changed(obs_properties_t *props, 
+	obs_property_t *p, obs_data_t *s)
 {
 	bool ticked = obs_data_get_bool(s, S_START_POS);
 	set_visibility_bool(S_ORG_X, ticked);
@@ -471,8 +471,8 @@ static bool provide_start_position_toggle_changed(obs_properties_t *props, obs_p
 	return true;
 }
 
-static bool provide_start_size_toggle_changed(obs_properties_t *props, obs_property_t *p,
-	obs_data_t *s)
+static bool provide_start_size_toggle_changed(obs_properties_t *props, 
+	obs_property_t *p, obs_data_t *s)
 {
 	bool ticked = obs_data_get_bool(s, S_START_SCALE);
 	set_visibility_bool(S_ORG_W, ticked);
@@ -480,8 +480,8 @@ static bool provide_start_size_toggle_changed(obs_properties_t *props, obs_prope
 	return true;
 }
 
-static bool provide_custom_size_at_destination_toggle_changed(obs_properties_t *props, obs_property_t *p,
-	obs_data_t *s)
+static bool provide_custom_size_at_destination_toggle_changed(
+	obs_properties_t *props, obs_property_t *p, obs_data_t *s)
 {
 	bool ticked = obs_data_get_bool(s, S_USE_DST_SCALE);
 	set_visibility_bool(S_DST_W, ticked);
@@ -489,8 +489,8 @@ static bool provide_custom_size_at_destination_toggle_changed(obs_properties_t *
 	return true;
 }
 
-static bool dest_grab_current_position_clicked(obs_properties_t *props, obs_property_t *p,
-	void *data)
+static bool dest_grab_current_position_clicked(obs_properties_t *props, 
+	obs_property_t *p, void *data)
 {
 	struct motion_filter_data *filter = data;
 	obs_sceneitem_t *item = get_item(filter->context, filter->item_name);
@@ -566,7 +566,8 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_set_modified_callback(p, path_type_changed);
 
 	// Button that pre-populates destination position with the source's current position
-	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS, dest_grab_current_position_clicked);
+	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS, 
+		dest_grab_current_position_clicked);
 	// Destination X and Y values
 	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_DST_Y, T_DST_Y, -8192, 8192, 1);
@@ -578,7 +579,8 @@ static obs_properties_t *motion_filter_properties(void *data)
 
 	// Toggle for providing a custom size for the source at its destination
 	p = obs_properties_add_bool(props, S_USE_DST_SCALE, T_USE_DST_SCALE);
-	obs_property_set_modified_callback(p, provide_custom_size_at_destination_toggle_changed);
+	obs_property_set_modified_callback(p, 
+		provide_custom_size_at_destination_toggle_changed);
 	// Custom width and height
 	obs_properties_add_int(props, S_DST_W, T_DST_W, 0, 8192, 1);
 	obs_properties_add_int(props, S_DST_H, T_DST_H, 0, 8192, 1);
