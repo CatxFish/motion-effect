@@ -1,7 +1,28 @@
+/*
+ *	motion-filter, an OBS-Studio filter plugin for animating sources using 
+ *	transform manipulation on the scene.
+ *	Copyright(C) <2018>  <CatxFish>
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License along
+ *	with this program; if not, write to the Free Software Foundation, Inc.,
+ *	51 Franklin Street, Fifth Floor, Boston, MA 02110 - 1301 USA.
+ */
+
 #include <obs-module.h>
 #include <obs-hotkey.h>
 #include <util/dstr.h>
 
+// Define property keys
 #define	S_PATH_LINEAR       0
 #define S_PATH_QUADRATIC    1
 #define S_PATH_CUBIC        2
@@ -26,8 +47,9 @@
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
-#define S_USE_CURRENT_POS	"use_cur_pos"
+#define S_DEST_GRAB_POS		"use_cur_src_pos"
 
+// Define property localisation tags
 #define T_(v)               obs_module_text(v)
 #define T_PATH_TYPE         T_("PathType")
 #define T_START_POS         T_("Start.GivenPosition")
@@ -53,7 +75,7 @@
 #define T_FORWARD           T_("Forward")
 #define T_BACKWARD          T_("Backward")
 #define T_DISABLED          T_("Disabled")
-#define T_USE_CURRENT_POS	T_("UseCurrentPosition")
+#define T_DEST_GRAB_POS		T_("DestinationGrabPosition")
 
 struct motion_filter_data {
 	obs_source_t        *context;
@@ -404,74 +426,97 @@ static bool motion_list_source(obs_scene_t* scene,
 	return true;
 }
 
-#define set_vis(var, val, cmp) \
+/** 
+ * Macro: set_visibility
+ * ---------------------
+ * Sets the visibility of a property field in the config.
+ * Our lists have an int backend like an enum,
+ *		key:	the property key - e.g. S_EXAMPLE
+ *		val:	either 0 or 1 for toggles, 0->N for lists
+ *		cmp:	comparison value, either 1 for toggles, or 0->N for lists
+ */
+#define set_visibility(key, val, cmp) \
 		do { \
-			p = obs_properties_get(props, val); \
-			obs_property_set_visible(p, var >= cmp);\
+			p = obs_properties_get(props, key); \
+			obs_property_set_visible(p, val >= cmp);\
 		} while (false)
+
+/* 
+ * Macro: set_visibility_bool
+ * --------------------------
+ * Shorthand for when we want visibility directly affected by toggle. 
+ *		key:	the property key - e.g. S_EXAMPLE
+ *		vis:	a bool for whether the property should be shown (true) or hidden (false)
+ */
+#define set_visibility_bool(key, vis) \
+		set_visibility(key, vis ? 1 : 0, 1)
 
 static bool path_type_changed(obs_properties_t *props, obs_property_t *p,
 	obs_data_t *s)
 {
 	int type = (int)obs_data_get_int(s, S_PATH_TYPE);
-	set_vis(type, S_CTRL_X, S_PATH_QUADRATIC);
-	set_vis(type, S_CTRL_Y, S_PATH_QUADRATIC);
-	set_vis(type, S_CTRL2_X, S_PATH_CUBIC);
-	set_vis(type, S_CTRL2_Y, S_PATH_CUBIC);
+	set_visibility(S_CTRL_X, type, S_PATH_QUADRATIC);
+	set_visibility(S_CTRL_Y, type, S_PATH_QUADRATIC);
+	set_visibility(S_CTRL2_X, type, S_PATH_CUBIC);
+	set_visibility(S_CTRL2_Y, type, S_PATH_CUBIC);
 	return true;
 }
 
-static bool start_position_changed(obs_properties_t *props, obs_property_t *p,
+static bool provide_start_position_toggle_changed(obs_properties_t *props, obs_property_t *p,
 	obs_data_t *s)
 {
-	int type = obs_data_get_bool(s, S_START_POS) ? 1 : 0;
-	set_vis(type, S_ORG_X, 1);
-	set_vis(type, S_ORG_Y, 1);
+	bool ticked = obs_data_get_bool(s, S_START_POS);
+	set_visibility_bool(S_ORG_X, ticked);
+	set_visibility_bool(S_ORG_Y, ticked);
 	return true;
 }
 
-static bool start_scale_changed(obs_properties_t *props, obs_property_t *p,
+static bool provide_start_size_toggle_changed(obs_properties_t *props, obs_property_t *p,
 	obs_data_t *s)
 {
-	int type = obs_data_get_bool(s, S_START_SCALE) ? 1 : 0;
-	set_vis(type, S_ORG_W, 1);
-	set_vis(type, S_ORG_H, 1);
+	bool ticked = obs_data_get_bool(s, S_START_SCALE);
+	set_visibility_bool(S_ORG_W, ticked);
+	set_visibility_bool(S_ORG_H, ticked);
 	return true;
 }
 
-static bool scale_use_changed(obs_properties_t *props, obs_property_t *p,
+static bool provide_custom_size_at_destination_toggle_changed(obs_properties_t *props, obs_property_t *p,
 	obs_data_t *s)
 {
-	int enable = obs_data_get_bool(s, S_USE_DST_SCALE) ? 1 : 0;
-	set_vis(enable, S_DST_W, 1);
-	set_vis(enable, S_DST_H, 1);
+	bool ticked = obs_data_get_bool(s, S_USE_DST_SCALE);
+	set_visibility_bool(S_DST_W, ticked);
+	set_visibility_bool(S_DST_H, ticked);
 	return true;
 }
 
-static bool use_current_pos_clicked(obs_properties_t *props, obs_property_t *p,
+static bool dest_grab_current_position_clicked(obs_properties_t *props, obs_property_t *p,
 	void *data)
 {
 	struct motion_filter_data *filter = data;
 	obs_sceneitem_t *item = get_item(filter->context, filter->item_name);
-
+	// Find the targetted source item within the scene
 	if (!filter->item)
 		item = get_item_by_id(filter, filter->item_id);
 
 	if (item) {
 		struct obs_transform_info info;
 		obs_sceneitem_get_info(item, &info);
-		/*p = obs_properties_get(props, S_ORG_X);*/
+		// Set setting property values to match the source's current position
 		obs_data_t *settings = obs_source_get_settings(filter->context);
-		obs_data_set_double(settings, S_ORG_X, info.pos.x);
-		obs_data_set_double(settings, S_ORG_Y, info.pos.y);
+		obs_data_set_double(settings, S_DST_X, info.pos.x);
+		obs_data_set_double(settings, S_DST_Y, info.pos.y);
 		obs_data_release(settings);
 	}
 
 	return true;
 }
 
-#undef set_vis
+#undef set_visibility
+#undef set_visibility_bool
 
+/*
+ * Filter property layout.
+ */
 static obs_properties_t *motion_filter_properties(void *data)
 {
 	struct motion_filter_data *filter = data;
@@ -494,23 +539,25 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_list_add_string(p, disable_str.array, disable_str.array);
 	dstr_free(&disable_str);
 
+	// A list of sources
 	obs_scene_enum_items(scene, motion_list_source, (void*)p);
 	obs_property_set_modified_callback(p, source_changed);
 
+	// Toggle for providing a custom start position
 	p = obs_properties_add_bool(props, S_START_POS, T_START_POS);
-	obs_property_set_modified_callback(p, start_position_changed);
-
+	obs_property_set_modified_callback(p, provide_start_position_toggle_changed);
+	// Custom starting X and Y values
 	obs_properties_add_int(props, S_ORG_X, T_ORG_X, 0, 8192, 1);
 	obs_properties_add_int(props, S_ORG_Y, T_ORG_Y, 0, 8192, 1);
 
-	obs_properties_add_button(props, S_USE_CURRENT_POS, T_USE_CURRENT_POS, use_current_pos_clicked);
-
+	// Toggle for providing a custom starting size
 	p = obs_properties_add_bool(props, S_START_SCALE, T_START_SCALE);
-	obs_property_set_modified_callback(p, start_scale_changed);
-
+	obs_property_set_modified_callback(p, provide_start_size_toggle_changed);
+	// Custom width and height
 	obs_properties_add_int(props, S_ORG_W, T_ORG_W, 0, 8192, 1);
 	obs_properties_add_int(props, S_ORG_H, T_ORG_H, 0, 8192, 1);
 
+	// Various animation types
 	p = obs_properties_add_list(props, S_PATH_TYPE, T_PATH_TYPE,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(p, T_PATH_LINEAR, S_PATH_LINEAR);
@@ -518,21 +565,29 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_list_add_int(p, T_PATH_CUBIC, S_PATH_CUBIC);
 	obs_property_set_modified_callback(p, path_type_changed);
 
+	// Button that pre-populates destination position with the source's current position
+	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS, dest_grab_current_position_clicked);
+	// Destination X and Y values
 	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_DST_Y, T_DST_Y, -8192, 8192, 1);
+	// Other control point fields for other types
 	obs_properties_add_int(props, S_CTRL_X, T_CTRL_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_CTRL_Y, T_CTRL_Y, -8192, 8192, 1);
 	obs_properties_add_int(props, S_CTRL2_X, T_CTRL2_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_CTRL2_Y, T_CTRL2_Y, -8192, 8192, 1);
 
+	// Toggle for providing a custom size for the source at its destination
 	p = obs_properties_add_bool(props, S_USE_DST_SCALE, T_USE_DST_SCALE);
-	obs_property_set_modified_callback(p, scale_use_changed);
-
+	obs_property_set_modified_callback(p, provide_custom_size_at_destination_toggle_changed);
+	// Custom width and height
 	obs_properties_add_int(props, S_DST_W, T_DST_W, 0, 8192, 1);
 	obs_properties_add_int(props, S_DST_H, T_DST_H, 0, 8192, 1);
+
+	// Animation duration slider
 	obs_properties_add_float_slider(props, S_DURATION, T_DURATION, 0, 5, 
 		0.1);
 
+	// Forwards / Backwards button(s)
 	obs_properties_add_button(props, S_FORWARD, T_FORWARD, forward_clicked);
 
 	if (filter->round_trip)
