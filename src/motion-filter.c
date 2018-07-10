@@ -20,6 +20,7 @@
 
 #include <obs-module.h>
 #include <obs-hotkey.h>
+#include <obs-scene.h>
 #include <util/dstr.h>
 
 // Define property keys
@@ -358,7 +359,7 @@ static bool init_hotkey(void *data)
 	obs_scene_t *scene = obs_scene_from_source(source);
 	filter->hotkey_init = true;
 
-	if (!scene)
+	if (!scene || source->context.private)
 		return false;
 
 	register_hotkey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
