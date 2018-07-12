@@ -359,7 +359,7 @@ static bool init_hotkey(void *data)
 	obs_scene_t *scene = obs_scene_from_source(source);
 	filter->hotkey_init = true;
 
-	if (!scene || source->context.private)
+	if (!scene)
 		return false;
 
 	register_hotkey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
@@ -470,7 +470,7 @@ static bool motion_behaviour_changed(void *data, obs_properties_t *props, obs_pr
 		obs_hotkey_unregister(filter->hotkey_id_b);
 		filter->hotkey_id_b = NULL;
 		filter->hotkey_id_f = NULL;
-		init_hotkey(filter);
+		filter->hotkey_init = false;
 	}
 
 	return false;
