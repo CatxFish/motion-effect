@@ -20,8 +20,9 @@ See [Release Page](https://github.com/CatxFish/motion-filter/releases)
 - Go to hotkeys page in OBS settings and set hotkey(s) for the motion(s) within the scene.
 - That's everything!
 
-# Development
-To contribute, first follow build procedures for [obs-studio](https://github.com/obsproject/obs-studio/wiki/install-instructions#windows-build-directions).
+# Build
+### Windows
+First follow build procedures for [obs-studio](https://github.com/obsproject/obs-studio/wiki/install-instructions#windows-build-directions).
 
 - Building obs-studio will produce an `obs.lib` file, generated inside the build directories - e.g. `obs-studio/build/libobs/debug/obs.lib`
 
@@ -36,3 +37,14 @@ To contribute, first follow build procedures for [obs-studio](https://github.com
 - Click 'Generate'
 
 This should produce the desired development environment, which after building, shall produce the plugin dll file.
+
+### Linux (Test on Ubuntu)
+You have to download obs-studio source code first and make sure you have installed camke.
+```
+git clone https://github.com/CatxFish/motion-filter.git
+cd motion-filter
+mkdir build && cd build
+cmake -DLIBOBS_INCLUDE_DIR="<libobs path>" -DCMAKE_INSTALL_PREFIX=/usr ..
+make -j4
+sudo make install
+```
