@@ -20,6 +20,7 @@
 
 #include <obs-module.h>
 #include <obs-hotkey.h>
+#include <obs-scene.h>
 #include <util/dstr.h>
 
 // Define property keys
@@ -48,15 +49,18 @@
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
 #define S_DEST_GRAB_POS     "use_cur_src_pos"
+#define S_MOTION_BEHAVIOUR  "motion_behaviour"
+#define S_MOTION_ONE_WAY    0
+#define S_MOTION_ROUND_TRIP 1
 
 // Define property localisation tags
 #define T_(v)               obs_module_text(v)
 #define T_PATH_TYPE         T_("PathType")
-#define T_START_POS         T_("Start.GivenPosition")
-#define T_START_SCALE       T_("Start.GivenScale")
 #define	T_PATH_LINEAR       T_("PathType.Linear")
 #define T_PATH_QUADRATIC    T_("PathType.Quadratic")
 #define T_PATH_CUBIC        T_("PathType.Cubic")
+#define T_START_POS         T_("Start.GivenPosition")
+#define T_START_SCALE       T_("Start.GivenScale")
 #define T_ORG_X             T_("Start.X")
 #define T_ORG_Y             T_("Start.Y")
 #define T_ORG_W             T_("Start.W")
@@ -76,6 +80,9 @@
 #define T_BACKWARD          T_("Backward")
 #define T_DISABLED          T_("Disabled")
 #define T_DEST_GRAB_POS     T_("DestinationGrabPosition")
+#define T_MOTION_BEHAVIOUR  T_("Behaviour")
+#define T_MOTION_ONE_WAY    T_("Behaviour.OneWay")
+#define T_MOTION_ROUND_TRIP T_("Behaviour.RoundTrip")
 
 struct motion_filter_data {
 	obs_source_t        *context;
@@ -83,7 +90,6 @@ struct motion_filter_data {
 	obs_sceneitem_t     *item;
 	obs_hotkey_id		hotkey_id_f;
 	obs_hotkey_id       hotkey_id_b;
-	bool                round_trip;
 	bool                hotkey_init;
 	bool                restart_backward;
 	bool                motion_start;
@@ -91,6 +97,7 @@ struct motion_filter_data {
 	bool                start_position;
 	bool                start_scale;
 	bool                use_dst_scale;
+	int                 motion_behaviour;
 	int                 path_type;
 	int                 org_width;
 	int                 org_height;
@@ -179,18 +186,6 @@ static inline void set_item_scale(obs_sceneitem_t* item, int width, int height)
 		obs_sceneitem_set_scale(item, &scale);
 }
 
-static const char *motion_filter_get_name(void *unused)
-{
-	UNUSED_PARAMETER(unused);
-	return T_("Motion");
-}
-
-static const char *motion_filter_round_get_name(void *unused)
-{
-	UNUSED_PARAMETER(unused);
-	return T_("RoundTripMotion");
-}
-
 static bool motion_init(void *data, bool forward)
 {
 	struct motion_filter_data *filter = data;
@@ -272,7 +267,8 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	int height;
 	int64_t item_id;
 	const char *item_name;
-
+	
+	filter->motion_behaviour = obs_data_get_int(settings, S_MOTION_BEHAVIOUR);
 	filter->start_position = obs_data_get_bool(settings, S_START_POS);
 	filter->start_scale = obs_data_get_bool(settings, S_START_SCALE);
 	filter->path_type = (int)obs_data_get_int(settings, S_PATH_TYPE);
@@ -323,7 +319,7 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	filter->item_id = item_id;
 }
 
-static void register_hothey(struct motion_filter_data *filter, const char *type,
+static void register_hotkey(struct motion_filter_data *filter, const char *type,
 	const char *text, obs_source_t *source, obs_hotkey_func func)
 {
 	const char *name = obs_source_get_name(filter->context);
@@ -366,11 +362,11 @@ static bool init_hotkey(void *data)
 	if (!scene)
 		return false;
 
-	register_hothey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
+	register_hotkey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
 
-	if (filter->round_trip)
-		register_hothey(filter, S_BACKWARD, T_BACKWARD, source, hotkey_backward);
-		
+	if (filter->motion_behaviour == S_MOTION_ROUND_TRIP)
+		register_hotkey(filter, S_BACKWARD, T_BACKWARD, source, hotkey_backward);
+	
 	return true;
 }
 
@@ -389,7 +385,7 @@ static bool forward_clicked(obs_properties_t *props, obs_property_t *p,
 	void *data)
 {
 	struct motion_filter_data *filter = data;
-	if (motion_init(data, true) && filter->round_trip)
+	if (motion_init(data, true) && filter->motion_behaviour == S_MOTION_ROUND_TRIP)
 		return motion_set_button(props, p, true);
 	else
 		return false;
@@ -460,6 +456,24 @@ static bool path_type_changed(obs_properties_t *props, obs_property_t *p,
 	set_visibility(S_CTRL2_X, type, S_PATH_CUBIC);
 	set_visibility(S_CTRL2_Y, type, S_PATH_CUBIC);
 	return true;
+}
+
+static bool motion_behaviour_changed(void *data, obs_properties_t *props, obs_property_t *p,
+	obs_data_t *s)
+{
+	struct motion_filter_data *filter = data;
+	int behaviour = (int)obs_data_get_int(s, S_MOTION_BEHAVIOUR);
+	if (behaviour != filter->motion_behaviour) {
+		// Behaviour has changed! Nuke and reload the hotkey config.
+		filter->motion_behaviour = behaviour;
+		obs_hotkey_unregister(filter->hotkey_id_f);
+		obs_hotkey_unregister(filter->hotkey_id_b);
+		filter->hotkey_id_b = NULL;
+		filter->hotkey_id_f = NULL;
+		filter->hotkey_init = false;
+	}
+
+	return false;
 }
 
 static bool provide_start_position_toggle_changed(obs_properties_t *props, 
@@ -543,6 +557,14 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_scene_enum_items(scene, motion_list_source, (void*)p);
 	obs_property_set_modified_callback(p, source_changed);
 
+	// Various motion behaviour types
+	p = obs_properties_add_list(props, S_MOTION_BEHAVIOUR, T_MOTION_BEHAVIOUR,
+		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(p, T_MOTION_ONE_WAY, S_MOTION_ONE_WAY);
+	obs_property_list_add_int(p, T_MOTION_ROUND_TRIP, S_MOTION_ROUND_TRIP);
+	// Using modified_callback2 enables us to send along data into the callback
+	obs_property_set_modified_callback2(p, motion_behaviour_changed, filter);
+
 	// Toggle for providing a custom start position
 	p = obs_properties_add_bool(props, S_START_POS, T_START_POS);
 	obs_property_set_modified_callback(p, provide_start_position_toggle_changed);
@@ -591,22 +613,9 @@ static obs_properties_t *motion_filter_properties(void *data)
 
 	// Forwards / Backwards button(s)
 	obs_properties_add_button(props, S_FORWARD, T_FORWARD, forward_clicked);
-
-	if (filter->round_trip)
-		obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, backward_clicked);
+	obs_properties_add_button(props, S_BACKWARD, T_BACKWARD, backward_clicked);
 
 	return props;
-}
-
-static void motion_filter_defaults(obs_data_t *settings)
-{
-	obs_data_set_default_bool(settings, S_IS_REVERSED, false);
-	obs_data_set_default_int(settings, S_SOURCE, -1);
-	obs_data_set_default_int(settings, S_ORG_W, 300);
-	obs_data_set_default_int(settings, S_ORG_H, 300);
-	obs_data_set_default_int(settings, S_DST_W, 300);
-	obs_data_set_default_int(settings, S_DST_H, 300);
-	obs_data_set_default_double(settings, S_DURATION, 1.0);
 }
 
 static void cal_pos(struct motion_filter_data *filter)
@@ -680,7 +689,7 @@ static void motion_filter_tick(void *data, float seconds)
 			filter->motion_start = false;
 			filter->elapsed_time = 0.0f;
 			obs_sceneitem_release(filter->item);
-			if (filter->round_trip){
+			if (filter->motion_behaviour == S_MOTION_ROUND_TRIP){
 				filter->motion_reverse = !filter->motion_reverse;
 				set_reverse_info(filter);
 			}
@@ -711,22 +720,8 @@ static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
 	filter->context = context;
 	filter->motion_start = false;
 	filter->hotkey_init = false;
-	filter->round_trip = false;
-	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
-	filter->restart_backward = filter->motion_reverse;
-	obs_source_update(context, settings);
-	return filter;
-}
-
-static void *motion_filter_round_create(obs_data_t *settings, 
-	obs_source_t *context)
-{
-	struct motion_filter_data *filter = bzalloc(sizeof(*filter));
-
-	filter->context = context;
-	filter->motion_start = false;
-	filter->hotkey_init = false;
-	filter->round_trip = true;
+	filter->motion_behaviour == S_MOTION_ROUND_TRIP;
+	filter->path_type == S_PATH_LINEAR;
 	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
 	filter->restart_backward = filter->motion_reverse;
 	obs_source_update(context, settings);
@@ -750,11 +745,30 @@ static void motion_filter_destroy(void *data)
 	if (filter->hotkey_id_f)
 		obs_hotkey_unregister(filter->hotkey_id_f);
 
-	if (filter->hotkey_id_b && filter->round_trip)
+	if (filter->hotkey_id_b && filter->motion_behaviour == S_MOTION_ROUND_TRIP)
 		obs_hotkey_unregister(filter->hotkey_id_b);
 
 	bfree(filter->item_name);
 	bfree(filter);
+}
+
+static void motion_filter_defaults(obs_data_t *settings)
+{
+	obs_data_set_default_bool(settings, S_IS_REVERSED, false);
+	obs_data_set_default_int(settings, S_SOURCE, -1);
+	obs_data_set_default_int(settings, S_MOTION_BEHAVIOUR, S_MOTION_ROUND_TRIP);
+	obs_data_set_default_int(settings, S_ORG_W, 300);
+	obs_data_set_default_int(settings, S_ORG_H, 300);
+	obs_data_set_default_int(settings, S_DST_W, 300);
+	obs_data_set_default_int(settings, S_DST_H, 300);
+	obs_data_set_default_double(settings, S_DURATION, 1.0);
+}
+
+
+static const char *motion_filter_get_name(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+	return T_("Motion");
 }
 
 OBS_DECLARE_MODULE()
@@ -775,23 +789,7 @@ struct obs_source_info motion_filter = {
 	.filter_remove = motion_filter_remove
 };
 
-struct obs_source_info round_trip_motion_filter = {
-	.id = "round-motion-filter",
-	.type = OBS_SOURCE_TYPE_FILTER,
-	.output_flags = OBS_SOURCE_VIDEO,
-	.get_name = motion_filter_round_get_name,
-	.create = motion_filter_round_create,
-	.destroy = motion_filter_destroy,
-	.update = motion_filter_update,
-	.get_properties = motion_filter_properties,
-	.get_defaults = motion_filter_defaults,
-	.video_tick = motion_filter_tick,
-	.save = motion_filter_save,
-	.filter_remove = motion_filter_remove
-};
-
 bool obs_module_load(void) {
 	obs_register_source(&motion_filter);
-	obs_register_source(&round_trip_motion_filter);
 	return true;
 }
