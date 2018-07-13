@@ -611,7 +611,7 @@ static void motion_filter_defaults(obs_data_t *settings)
 
 static void cal_pos(struct motion_filter_data *filter)
 {
-	float elapsed_time = min(filter->duration, filter->elapsed_time);
+	float elapsed_time = fmin(filter->duration, filter->elapsed_time);
 	float t, p;
 
 	if (filter->motion_reverse){
