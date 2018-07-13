@@ -39,7 +39,7 @@ First follow build procedures for [obs-studio](https://github.com/obsproject/obs
 This should produce the desired development environment, which after building, shall produce the plugin dll file.
 
 ### Linux (Test on Ubuntu)
-You have to download obs-studio source code first and make sure you have installed camke.
+You have to download obs-studio source code first and make sure you have installed cmake.
 ```
 git clone https://github.com/CatxFish/motion-filter.git
 cd motion-filter
