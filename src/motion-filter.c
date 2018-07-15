@@ -722,10 +722,12 @@ static void *motion_filter_round_create(obs_data_t *settings,
 	filter->item_id = -1;
 	filter->motion_reverse = obs_data_get_bool(settings, S_IS_REVERSED);
 	if (filter->motion_reverse){
-		filter->org_pos.x = obs_data_get_int(settings, S_ORG_X);
-		filter->org_pos.y = obs_data_get_int(settings, S_ORG_Y);
-		filter->org_scale.x = obs_data_get_double(settings, S_ORG_SCALE_X);
-		filter->org_scale.y = obs_data_get_double(settings, S_ORG_SCALE_Y);
+		filter->org_pos.x = (float)obs_data_get_int(settings, S_ORG_X);
+		filter->org_pos.y = (float)obs_data_get_int(settings, S_ORG_Y);
+		filter->org_scale.x = (float)obs_data_get_double(settings, 
+			S_ORG_SCALE_X);
+		filter->org_scale.y = (float)obs_data_get_double(settings, 
+			S_ORG_SCALE_Y);
 	}
 	
 	obs_source_update(context, settings);
