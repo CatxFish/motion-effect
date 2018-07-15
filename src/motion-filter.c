@@ -547,8 +547,8 @@ static obs_properties_t *motion_filter_properties(void *data)
 	p = obs_properties_add_bool(props, S_START_POS, T_START_POS);
 	obs_property_set_modified_callback(p, provide_start_position_toggle_changed);
 	// Custom starting X and Y values
-	obs_properties_add_int(props, S_ORG_X, T_ORG_X, 0, 8192, 1);
-	obs_properties_add_int(props, S_ORG_Y, T_ORG_Y, 0, 8192, 1);
+	obs_properties_add_int(props, S_ORG_X, T_ORG_X, -8192, 8192, 1);
+	obs_properties_add_int(props, S_ORG_Y, T_ORG_Y, -8192, 8192, 1);
 
 	// Toggle for providing a custom starting size
 	p = obs_properties_add_bool(props, S_START_SCALE, T_START_SCALE);
