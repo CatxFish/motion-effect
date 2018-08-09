@@ -23,33 +23,33 @@
 #include <util/dstr.h>
 
 
-inline obs_sceneitem_t *get_item(obs_source_t* context,
-	const char* name)
+obs_sceneitem_t *get_item(obs_source_t *context,
+	const char *name)
 {
 	obs_source_t *source = obs_filter_get_parent(context);
 	obs_scene_t *scene = obs_scene_from_source(source);
 	return obs_scene_find_source(scene, name);
 }
 
-inline obs_sceneitem_t* get_item_by_id(obs_source_t* context, 
+obs_sceneitem_t *get_item_by_id(obs_source_t* context, 
 	int64_t id)
 {
-	obs_source_t* source = obs_filter_get_parent(context);
-	obs_scene_t* scene = obs_scene_from_source(source);
+	obs_source_t *source = obs_filter_get_parent(context);
+	obs_scene_t *scene = obs_scene_from_source(source);
 	obs_sceneitem_t* item = obs_scene_find_sceneitem_by_id(scene, id);
 	return item;
 }
 
-inline int64_t get_item_id(obs_source_t* context, const char* name)
+int64_t get_item_id(obs_source_t* context, const char* name)
 {
-	obs_sceneitem_t* item = get_item(context, name);
+	obs_sceneitem_t *item = get_item(context, name);
 	return item ? obs_sceneitem_get_id(item) : -1;
 }
 
-inline bool cal_size(obs_sceneitem_t* item, float sx, float sy,
+bool cal_size(obs_sceneitem_t* item, float sx, float sy,
 	int* width, int* height)
 {
-	obs_source_t* item_source = obs_sceneitem_get_source(item);
+	obs_source_t *item_source = obs_sceneitem_get_source(item);
 	int base_width = obs_source_get_base_width(item_source);
 	int base_height = obs_source_get_base_height(item_source);
 
@@ -59,10 +59,18 @@ inline bool cal_size(obs_sceneitem_t* item, float sx, float sy,
 	return true;
 }
 
-inline bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
+bool check_item_basesize(obs_sceneitem_t* item)
+{
+	obs_source_t *item_source = obs_sceneitem_get_source(item);
+	int base_width = obs_source_get_width(item_source);
+	int base_height = obs_source_get_height(item_source);
+	return base_width != 0 && base_height != 0;
+}
+
+bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
 	int width, int height)
 {
-	obs_source_t* item_source = obs_sceneitem_get_source(item);
+	obs_source_t *item_source = obs_sceneitem_get_source(item);
 	int base_width = obs_source_get_width(item_source);
 	int base_height = obs_source_get_height(item_source);
 
@@ -75,7 +83,7 @@ inline bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
 	return true;
 }
 
-inline void set_item_scale(obs_sceneitem_t* item, int width, int height)
+void set_item_scale(obs_sceneitem_t *item, int width, int height)
 {
 	struct vec2 scale;
 	if (cal_scale(item, &scale.x, &scale.y, width, height))
@@ -138,3 +146,18 @@ void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	obs_data_set_array(settings, name, save_array);
 	obs_data_array_release(save_array);
 }
+
+float bezier(float point[], float percent, int order)
+{
+	float p = 1.0f - percent;
+	float t = percent;
+	int mid = (order + 1) / 2 ;
+
+	if (order <= 1)
+		return p * point[0] + t * point[order];
+	
+	return p * bezier(point, t, order - 1) + t * 
+		bezier(&point[mid], t, order - 1);
+}
+
+

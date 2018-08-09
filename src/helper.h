@@ -22,20 +22,24 @@
 
 #include <obs-module.h>
 
-obs_sceneitem_t *get_item(obs_source_t* context,const char* name);
-obs_sceneitem_t* get_item_by_id(obs_source_t* context,int64_t id);
-int64_t get_item_id(obs_source_t* context, const char* name);
+obs_sceneitem_t* get_item(obs_source_t *context,const char *name);
+obs_sceneitem_t* get_item_by_id(obs_source_t *context,int64_t id);
+int64_t get_item_id(obs_source_t *context, const char *name);
 
-bool cal_size(obs_sceneitem_t* item, float sx, float sy, int* width, 
-	int* height);
+bool cal_size(obs_sceneitem_t* item, float sx, float sy, int *width,
+	int *height);
 
-bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy, int width, 
+bool check_item_basesize(obs_sceneitem_t *item);
+
+bool cal_scale(obs_sceneitem_t *item, float *sx, float *sy, int width,
 	int height);
 
-void set_item_scale(obs_sceneitem_t* item, int width, int height);
+void set_item_scale(obs_sceneitem_t *item, int width, int height);
 
 obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 	const char *name, const char *text, obs_hotkey_func func, void *data);
 
 void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	const char *name);
+
+float bezier(float point[], float percent, int order);
