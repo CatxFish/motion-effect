@@ -22,9 +22,10 @@
 #include <obs-hotkey.h>
 #include <obs-scene.h>
 #include <util/dstr.h>
+#include "helper.h"
 
 // Define property keys
-#define	S_PATH_LINEAR       0
+#define S_PATH_LINEAR       0
 #define S_PATH_QUADRATIC    1
 #define S_PATH_CUBIC        2
 #define S_IS_REVERSED       "is_reversed"
@@ -44,7 +45,7 @@
 #define S_DST_W             "dst_w"
 #define S_DST_H             "dst_h"
 #define S_USE_DST_SCALE     "dst_use_scale"
-#define	S_DURATION          "duration"
+#define S_DURATION          "duration"
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
@@ -56,7 +57,7 @@
 // Define property localisation tags
 #define T_(v)               obs_module_text(v)
 #define T_PATH_TYPE         T_("PathType")
-#define	T_PATH_LINEAR       T_("PathType.Linear")
+#define T_PATH_LINEAR       T_("PathType.Linear")
 #define T_PATH_QUADRATIC    T_("PathType.Quadratic")
 #define T_PATH_CUBIC        T_("PathType.Cubic")
 #define T_START_POS         T_("Start.GivenPosition")
@@ -88,7 +89,7 @@ struct motion_filter_data {
 	obs_source_t        *context;
 	obs_scene_t         *scene;
 	obs_sceneitem_t     *item;
-	obs_hotkey_id		hotkey_id_f;
+	obs_hotkey_id       hotkey_id_f;
 	obs_hotkey_id       hotkey_id_b;
 	bool                hotkey_init;
 	bool                restart_backward;
@@ -118,74 +119,6 @@ struct motion_filter_data {
 
 };
 
-static inline obs_sceneitem_t *get_item(obs_source_t* context, 
-	const char* name)
-{
-	obs_source_t *source = obs_filter_get_parent(context);
-	obs_scene_t *scene = obs_scene_from_source(source);
-	return obs_scene_find_source(scene, name);
-}
-
-static inline obs_sceneitem_t* get_item_by_id(void *data, int64_t id)
-{
-	struct motion_filter_data *filter = data;
-	obs_source_t* source = obs_filter_get_parent(filter->context);
-	obs_scene_t* scene = obs_scene_from_source(source);
-	obs_sceneitem_t* item = obs_scene_find_sceneitem_by_id(scene, id);
-	if (item){
-		obs_data_t *settings = obs_source_get_settings(filter->context);
-		obs_source_t *item_source = obs_sceneitem_get_source(item);
-		const char *name = obs_source_get_name(item_source);
-		obs_data_set_string(settings, S_SOURCE, name);
-		bfree(filter->item_name);
-		filter->item_name = bstrdup(name);
-		obs_data_release(settings);
-	}
-	return item;
-}
-
-static inline int64_t get_item_id(obs_source_t* context, const char* name)
-{
-	obs_sceneitem_t* item = get_item(context, name);
-	return item ? obs_sceneitem_get_id(item) : -1;
-}
-
-static bool cal_size(obs_sceneitem_t* item, float sx, float sy,
-	int* width, int* height)
-{
-	obs_source_t* item_source = obs_sceneitem_get_source(item);
-	int base_width = obs_source_get_base_width(item_source);
-	int base_height = obs_source_get_base_height(item_source);
-
-	*width = (int)(base_width * sx);
-	*height = (int)(base_width * sy);
-
-	return true;
-}
-
-static bool cal_scale(obs_sceneitem_t* item, float* sx, float*sy,
-	int width, int height)
-{
-	obs_source_t* item_source = obs_sceneitem_get_source(item);
-	int base_width = obs_source_get_width(item_source);
-	int base_height = obs_source_get_height(item_source);
-
-	if (base_width == 0 || base_height == 0)
-		return false;
-
-	*sx = (float)width / base_width;
-	*sy = (float)height / base_height;
-
-	return true;
-}
-
-static inline void set_item_scale(obs_sceneitem_t* item, int width, int height)
-{
-	struct vec2 scale;
-	if (cal_scale(item, &scale.x, &scale.y, width, height))
-		obs_sceneitem_set_scale(item, &scale);
-}
-
 static bool motion_init(void *data, bool forward)
 {
 	struct motion_filter_data *filter = data;
@@ -195,9 +128,10 @@ static bool motion_init(void *data, bool forward)
 
 	filter->item = get_item(filter->context, filter->item_name);
 
-	if (!filter->item)
+	if (!filter->item) {
 		filter->item = get_item_by_id(filter, filter->item_id);
-
+		reset_context_name(data, filter->item);
+	}
 	if (filter->item){
 
 		if (!cal_scale(filter->item, &filter->dst_scale.x,
@@ -228,6 +162,20 @@ static bool motion_init(void *data, bool forward)
 		return true;
 	}
 	return false;
+}
+
+static void reset_context_name(void *data, obs_sceneitem_t* item)
+{
+	struct motion_filter_data *filter = data;
+	if (item) {
+		obs_data_t *settings = obs_source_get_settings(filter->context);
+		obs_source_t *item_source = obs_sceneitem_get_source(item);
+		const char *name = obs_source_get_name(item_source);
+		obs_data_set_string(settings, S_SOURCE, name);
+		bfree(filter->item_name);
+		filter->item_name = bstrdup(name);
+		obs_data_release(settings);
+	}
 }
 
 static bool hotkey_forward(void *data, obs_hotkey_pair_id id,
@@ -319,39 +267,6 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	filter->item_id = item_id;
 }
 
-static void register_hotkey(struct motion_filter_data *filter, const char *type,
-	const char *text, obs_source_t *source, obs_hotkey_func func)
-{
-	const char *name = obs_source_get_name(filter->context);
-	const char *s_name = obs_source_get_name(source);
-	obs_data_t *settings = obs_source_get_settings(filter->context);
-	obs_data_array_t *save_array;
-	struct dstr str = { 0 };
-	dstr_copy(&str, text);
-	dstr_cat(&str, " [ %1 ] ");
-	dstr_replace(&str, "%1", name);
-	const char *description = str.array;
-	obs_hotkey_id id;
-
-	if (s_name)
-		id = obs_hotkey_register_source(source,description, description, 
-		func, filter);
-	else
-		id = obs_hotkey_register_frontend(description, description, func, 
-		filter);
-
-	if (strcmp(type, S_FORWARD) == 0)
-		filter->hotkey_id_f = id;
-	else
-		filter->hotkey_id_b = id;
-
-	save_array = obs_data_get_array(settings, type);
-	obs_hotkey_load(id, save_array);
-	obs_data_array_release(save_array);
-	dstr_free(&str);
-	obs_data_release(settings);
-}
-
 static bool init_hotkey(void *data)
 {
 	struct motion_filter_data *filter = data;
@@ -362,12 +277,22 @@ static bool init_hotkey(void *data)
 	if (!scene)
 		return false;
 
-	register_hotkey(filter, S_FORWARD, T_FORWARD, source, hotkey_forward);
 
-	if (filter->motion_behaviour == S_MOTION_ROUND_TRIP)
-		register_hotkey(filter, S_BACKWARD, T_BACKWARD, source, hotkey_backward);
-	
+	filter->hotkey_id_f = register_hotkey(filter->context, source, S_FORWARD,
+		T_FORWARD, hotkey_forward, data);
+
+	if (filter->motion_behaviour == S_MOTION_ROUND_TRIP) {
+		filter->hotkey_id_b = register_hotkey(filter->context, source, 
+			S_BACKWARD, T_BACKWARD, hotkey_backward, data);
+	}
+
 	return true;
+}
+
+static bool deinit_hotkey(void *data)
+{
+	
+
 }
 
 static bool motion_set_button(obs_properties_t *props, obs_property_t *p,
@@ -509,8 +434,10 @@ static bool dest_grab_current_position_clicked(obs_properties_t *props,
 	struct motion_filter_data *filter = data;
 	obs_sceneitem_t *item = get_item(filter->context, filter->item_name);
 	// Find the targetted source item within the scene
-	if (!filter->item)
+	if (!filter->item) {
 		item = get_item_by_id(filter, filter->item_id);
+		reset_context_name(data, filter->item);
+	}
 
 	if (item) {
 		struct obs_transform_info info;
@@ -618,7 +545,7 @@ static obs_properties_t *motion_filter_properties(void *data)
 	return props;
 }
 
-static void cal_pos(struct motion_filter_data *filter)
+static void cal_variation(struct motion_filter_data *filter)
 {
 	float elapsed_time = min(filter->duration, filter->elapsed_time);
 	float t, p;
@@ -676,7 +603,7 @@ static void motion_filter_tick(void *data, float seconds)
 	if (filter->motion_start){
 
 		if (filter->duration > 0){
-			cal_pos(filter);
+			cal_variation(filter);
 			obs_sceneitem_set_pos(filter->item, &filter->position);
 			obs_sceneitem_set_scale(filter->item, &filter->scale);
 		}
@@ -705,12 +632,8 @@ static void motion_filter_tick(void *data, float seconds)
 static void motion_filter_save(void *data, obs_data_t *settings)
 {
 	struct motion_filter_data *filter = data;
-	obs_data_array_t* array_f = obs_hotkey_save(filter->hotkey_id_f);
-	obs_data_array_t* array_b = obs_hotkey_save(filter->hotkey_id_b);
-	obs_data_set_array(settings, S_FORWARD, array_f);
-	obs_data_set_array(settings, S_BACKWARD, array_b);
-	obs_data_array_release(array_f);
-	obs_data_array_release(array_b);
+	save_hotkey_config(filter->hotkey_id_f, settings, S_FORWARD);
+	save_hotkey_config(filter->hotkey_id_b, settings, S_BACKWARD);
 }
 
 static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
