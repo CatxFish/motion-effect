@@ -91,8 +91,8 @@ void set_item_scale(obs_sceneitem_t *item, int width, int height)
 }
 
 /*
-Workaround way to judge if is a program scene.
-A program scene is a private source without name. 
+ * Workaround way to judge if is a program scene.
+ * A program scene is a private source without name. 
 */
 
 inline bool is_program_scene(obs_source_t *scene)
@@ -123,12 +123,13 @@ obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 	const char *description = str.array;
 	obs_hotkey_id id;
 
-	if (is_program_scene(scene))
-		id = obs_hotkey_register_source(scene, description, description,
-			func, data);
-	else
+	if (is_program_scene(scene)) {
 		id = obs_hotkey_register_frontend(description, description, func,
 			data);
+	} else {
+		id = obs_hotkey_register_source(scene, description, description,
+			func, data);
+	}
 
 	save_array = obs_data_get_array(settings, name);
 	obs_hotkey_load(id, save_array);
@@ -142,22 +143,27 @@ obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings, 
 	const char *name)
 {
+	if (id == OBS_INVALID_HOTKEY_ID)
+		return;
+
 	obs_data_array_t* save_array = obs_hotkey_save(id);
 	obs_data_set_array(settings, name, save_array);
 	obs_data_array_release(save_array);
 }
 
+//B<0~N>(t) = (1-t) * B<0~N-1>(t)+ t * B<1~N>(t)
 float bezier(float point[], float percent, int order)
 {
 	float p = 1.0f - percent;
 	float t = percent;
-	int mid = (order + 1) / 2 ;
 
-	if (order <= 1)
-		return p * point[0] + t * point[order];
-	
-	return p * bezier(point, t, order - 1) + t * 
-		bezier(&point[mid], t, order - 1);
+	if (order < 1)
+		return point[0];
+	else if (order == 1)
+		return p * point[0] + t * point[1];
+	else
+		return p * bezier(point, t, order - 1) + 
+		t * bezier(&point[1], t, order - 1);
 }
 
 
