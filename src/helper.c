@@ -103,7 +103,7 @@ inline bool is_program_scene(obs_source_t *scene)
 	if (!scene->context.private)
 		return false;
 
-	if (!obs_source_get_name(scene))
+	if (obs_source_get_name(scene))
 		return false;
 
 	return true;
@@ -140,18 +140,21 @@ obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 	return id;
 }
 
+void unregister_hotkey(obs_hotkey_id id)
+{
+	if (id != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(id);
+
+}
+
 void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings, 
 	const char *name)
 {
-	if (id == OBS_INVALID_HOTKEY_ID)
-		return;
-
 	obs_data_array_t* save_array = obs_hotkey_save(id);
 	obs_data_set_array(settings, name, save_array);
 	obs_data_array_release(save_array);
 }
 
-//B<0~N>(t) = (1-t) * B<0~N-1>(t)+ t * B<1~N>(t)
 float bezier(float point[], float percent, int order)
 {
 	float p = 1.0f - percent;

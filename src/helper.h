@@ -36,8 +36,12 @@ bool cal_scale(obs_sceneitem_t *item, float *sx, float *sy, int width,
 
 void set_item_scale(obs_sceneitem_t *item, int width, int height);
 
+bool is_program_scene(obs_source_t *scene);
+
 obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 	const char *name, const char *text, obs_hotkey_func func, void *data);
+
+void unregister_hotkey(obs_hotkey_id id);
 
 void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	const char *name);

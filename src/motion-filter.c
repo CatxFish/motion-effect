@@ -21,6 +21,7 @@
 #include <obs-module.h>
 #include <obs-hotkey.h>
 #include <obs-scene.h>
+#include <obs-frontend-api.h>
 #include <util/dstr.h>
 #include "helper.h"
 
@@ -35,7 +36,8 @@ enum {
 enum {
 	BEHAVIOR_NONE = 0,
 	BEHAVIOR_ONE_WAY = 1,
-	BEHAVIOR_ROUND_TRIP = 2
+	BEHAVIOR_ROUND_TRIP = 2,
+	BEHAVIOR_SCENE_SWITCH =3
 };
 
 #define VARIATION_POSITION  (1<<0)
@@ -67,8 +69,9 @@ enum {
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
 #define S_DEST_GRAB_POS     "use_cur_src_pos"
-#define S_MOTION_BEHAVIOR  "motion_behavior"
+#define S_MOTION_BEHAVIOR   "motion_behavior"
 #define S_VARIATION_TYPE    "variation_type"
+#define S_SCENE_NAME        "scene_name"
 
 // Define property localisation tags
 #define T_(v)               obs_module_text(v)
@@ -101,9 +104,10 @@ enum {
 #define T_VARIATION_SIZE    T_("VariationType.Size")
 #define T_VARIATION_BOTH    T_("VariationType.PositionAndSize")
 #define T_DEST_GRAB_POS     T_("DestinationGrabPosition")
-#define T_MOTION_BEHAVIOR  T_("Behavior")
-#define T_MOTION_ONE_WAY    T_("Behavior.OneWay")
-#define T_MOTION_ROUND_TRIP T_("Behavior.RoundTrip")
+#define T_MOTION_BEHAVIOR   T_("Behavior")
+#define T_HOTKEY_ONE_WAY    T_("Behavior.OneWay")
+#define T_HOTKEY_ROUND_TRIP T_("Behavior.RoundTrip")
+#define T_SCENE_SWITCH      T_("Behavior.SceneSwitch")
 
 typedef struct variation_data variation_data_t;
 typedef struct motion_filter_data motion_filter_data_t;
@@ -125,7 +129,7 @@ struct motion_filter_data {
 	obs_hotkey_id       hotkey_id_f;
 	obs_hotkey_id       hotkey_id_b;
 	variation_data_t    variation;
-	bool                hotkey_init;
+	bool                initialize;
 	bool                restart_backward;
 	bool                motion_start;
 	bool                motion_end;
@@ -154,6 +158,11 @@ inline bool is_reverse(motion_filter_data_t *filter)
 		filter->motion_behavior == BEHAVIOR_ROUND_TRIP;
 }
 
+inline const char* get_scene_name(motion_filter_data_t *filter)
+{
+	obs_source_t* scene = obs_filter_get_parent(filter->context);
+	return obs_source_get_name(scene);
+}
 
 static void update_variation_data(motion_filter_data_t *filter)
 {
@@ -223,6 +232,7 @@ static void recover_source(motion_filter_data_t *filter)
 {
 	struct vec2 pos;
 	struct vec2 scale;
+	obs_data_t *settings;
 	variation_data_t *var = &filter->variation;
 
 	if (!filter->motion_end)
@@ -236,7 +246,7 @@ static void recover_source(motion_filter_data_t *filter)
 	obs_sceneitem_set_pos(filter->item, &pos);
 	obs_sceneitem_set_scale(filter->item, &scale);
 	filter->motion_end = false;
-	obs_data_t *settings = obs_source_get_settings(filter->context);
+	settings = obs_source_get_settings(filter->context);
 	obs_data_set_bool(settings, S_MOTION_END, false);
 	obs_data_release(settings);
 }
@@ -282,6 +292,36 @@ static bool hotkey_backward(void *data, obs_hotkey_pair_id id,
 	return motion_init(data, false);
 }
 
+static void scene_change(enum obs_frontend_event event, void *data)
+{
+	motion_filter_data_t *filter = data;
+	obs_data_t *settings;
+	obs_source_t *cur_scene;
+	obs_source_t *self_scene;
+	const char* cur_name;
+	const char* self_name;
+
+	if (event != OBS_FRONTEND_EVENT_SCENE_CHANGED)
+		return;
+
+	cur_scene = obs_frontend_get_current_scene();
+	self_scene = obs_filter_get_parent(filter->context);
+
+	if (cur_scene == self_scene) {
+		motion_init(data, true);
+	} else if (is_program_scene(self_scene)) {
+		settings = obs_source_get_settings(filter->context);
+		self_name = obs_data_get_string(settings, S_SCENE_NAME);
+		cur_name = obs_source_get_name(cur_scene);
+		if (self_name && strcmp(self_name, cur_name)==0) {
+			motion_init(data, true);
+		}
+	} else {
+		recover_source(filter);
+	}
+	obs_source_release(cur_scene);
+}
+
 static void set_reverse_info(struct motion_filter_data *filter)
 {
 	variation_data_t *var = &filter->variation;
@@ -309,6 +349,11 @@ static void get_reverse_info(struct motion_filter_data *filter)
 static void motion_filter_save(void *data, obs_data_t *settings)
 {
 	motion_filter_data_t *filter = data;
+	const char *name = get_scene_name(filter);
+
+	if (name) 
+		obs_data_set_string(settings, S_SCENE_NAME, name);
+
 	save_hotkey_config(filter->hotkey_id_f, settings, S_FORWARD);
 	save_hotkey_config(filter->hotkey_id_b, settings, S_BACKWARD);
 }
@@ -360,9 +405,13 @@ static bool register_trigger_event(void *data)
 	obs_source_t *source = obs_filter_get_parent(filter->context);
 	obs_scene_t *scene = obs_scene_from_source(source);
 
-
 	if (!scene)
 		return false;
+
+	if (filter->motion_behavior == BEHAVIOR_SCENE_SWITCH) {
+		obs_frontend_add_event_callback(scene_change, data);
+		return true;
+	}
 
 
 	filter->hotkey_id_f = register_hotkey(filter->context, source, S_FORWARD,
@@ -379,17 +428,21 @@ static bool register_trigger_event(void *data)
 static void unregister_trigger_event(void *data)
 {
 	motion_filter_data_t *filter = data;
+	obs_data_t *settings;
 
-	obs_data_t *settings = obs_source_get_settings(filter->context);
+
+	if (filter->motion_behavior == BEHAVIOR_SCENE_SWITCH) {
+		obs_frontend_remove_event_callback(scene_change, data);
+		return ;
+	}
+
+	settings = obs_source_get_settings(filter->context);
 	motion_filter_save(data, settings);
 	obs_data_release(settings);
 
-	if (filter->hotkey_id_f!=OBS_INVALID_HOTKEY_ID)
-		obs_hotkey_unregister(filter->hotkey_id_f);
 
-	if (filter->hotkey_id_f != OBS_INVALID_HOTKEY_ID)
-		obs_hotkey_unregister(filter->hotkey_id_b);
-
+	unregister_hotkey(filter->hotkey_id_f);
+	unregister_hotkey(filter->hotkey_id_b);
 	filter->hotkey_id_f = OBS_INVALID_HOTKEY_ID;
 	filter->hotkey_id_b = OBS_INVALID_HOTKEY_ID;
 }
@@ -429,9 +482,12 @@ static bool source_changed(void *data, obs_properties_t *props,
 {
 	motion_filter_data_t* filter = data;
 	const char* name = obs_data_get_string(s, S_SOURCE);
-	if (strcmp(filter->item_name, name) == 0)
+	
+	if (!filter->item_name)
 		return false;
-	else if (filter->item_name) 
+	else if (strcmp(filter->item_name, name) == 0)
+		return false;
+	else 
 		recover_source(filter);
 
 	return motion_set_button(props, p, false);
@@ -461,33 +517,20 @@ static bool motion_list_source(obs_scene_t* scene,
 		} while (false)
 
 
-static bool motion_behavior_changed(void *data, obs_properties_t *props, 
-	obs_property_t *p, obs_data_t *s)
-{
-	motion_filter_data_t *filter = data;
-	int behavior = (int)obs_data_get_int(s, S_MOTION_BEHAVIOR);
-	if (behavior != filter->motion_behavior) {
-		filter->motion_behavior = behavior;
-		recover_source(filter);
-		unregister_trigger_event(data);
-		register_trigger_event(data);
-		filter->motion_behavior = behavior;
-	}
-
-	return false;
-}
-
 static bool properties_set_vis(void *data, obs_properties_t *props,
 	obs_property_t *p, obs_data_t *s)
 {
+	int trigger_type = (int)obs_data_get_int(s, S_MOTION_BEHAVIOR);
 	int var_type = (int)obs_data_get_int(s, S_VARIATION_TYPE);
 	int path_type = (int)obs_data_get_int(s, S_PATH_TYPE);
 	bool use_start = obs_data_get_bool(s, S_START_POS);
 	bool change_pos = (var_type & VARIATION_POSITION) != 0;
 	bool change_size = (var_type & VARIATION_SIZE) != 0;
+	bool scene_switch = trigger_type == BEHAVIOR_SCENE_SWITCH;
 
-	set_visibility(S_START_X, change_pos && use_start);
-	set_visibility(S_START_Y, change_pos && use_start);
+	set_visibility(S_START_POS, !scene_switch);
+	set_visibility(S_START_X, change_pos && (use_start || scene_switch));
+	set_visibility(S_START_Y, change_pos && (use_start || scene_switch));
 	set_visibility(S_DST_X, change_pos);
 	set_visibility(S_DST_Y, change_pos);
 	set_visibility(S_PATH_TYPE, change_pos);
@@ -495,12 +538,29 @@ static bool properties_set_vis(void *data, obs_properties_t *props,
 	set_visibility(S_CTRL_Y, change_pos && path_type >= PATH_QUADRATIC);
 	set_visibility(S_CTRL2_X, change_pos && path_type >= PATH_CUBIC);
 	set_visibility(S_CTRL2_Y, change_pos && path_type >= PATH_CUBIC);
-	set_visibility(S_START_W, change_size && use_start);
-	set_visibility(S_START_H, change_size && use_start);
+	set_visibility(S_START_W, change_size && (use_start || scene_switch));
+	set_visibility(S_START_H, change_size && (use_start || scene_switch));
 	set_visibility(S_DST_W, change_size);
 	set_visibility(S_DST_H, change_size);
 
+	UNUSED_PARAMETER(p);
 	return true;
+}
+
+static bool motion_behavior_changed(void *data, obs_properties_t *props,
+	obs_property_t *p, obs_data_t *s)
+{
+	motion_filter_data_t *filter = data;
+	int behavior = (int)obs_data_get_int(s, S_MOTION_BEHAVIOR);
+	if (behavior != filter->motion_behavior) {
+		recover_source(filter);
+		unregister_trigger_event(data);
+		filter->motion_behavior = behavior;
+		register_trigger_event(data);
+		properties_set_vis(data, props, p, s);
+	}
+
+	return false;
 }
 
 static bool dest_grab_current_position_clicked(obs_properties_t *props, 
@@ -562,8 +622,9 @@ static obs_properties_t *motion_filter_properties(void *data)
 	// Various motion behaviour types
 	p = obs_properties_add_list(props, S_MOTION_BEHAVIOR, T_MOTION_BEHAVIOR,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
-	obs_property_list_add_int(p, T_MOTION_ONE_WAY, BEHAVIOR_ONE_WAY);
-	obs_property_list_add_int(p, T_MOTION_ROUND_TRIP, BEHAVIOR_ROUND_TRIP);
+	obs_property_list_add_int(p, T_HOTKEY_ONE_WAY, BEHAVIOR_ONE_WAY);
+	obs_property_list_add_int(p, T_HOTKEY_ROUND_TRIP, BEHAVIOR_ROUND_TRIP);
+	obs_property_list_add_int(p, T_SCENE_SWITCH, BEHAVIOR_SCENE_SWITCH);
 	// Using modified_callback2 enables us to send along data into the callback
 	obs_property_set_modified_callback2(p, motion_behavior_changed, filter);
 
@@ -596,12 +657,13 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_list_add_int(p, T_PATH_CUBIC, PATH_CUBIC);
 	obs_property_set_modified_callback2(p, properties_set_vis,filter);
 
-	// Button that pre-populates destination position with the source's current position
-	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS, 
-		dest_grab_current_position_clicked);
 	// Destination X and Y values
 	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_DST_Y, T_DST_Y, -8192, 8192, 1);
+	// Button that pre-populates destination position with the source's current position
+	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS,
+		dest_grab_current_position_clicked);
+
 	// Other control point fields for other types
 	obs_properties_add_int(props, S_CTRL_X, T_CTRL_X, -8192, 8192, 1);
 	obs_properties_add_int(props, S_CTRL_Y, T_CTRL_Y, -8192, 8192, 1);
@@ -681,9 +743,14 @@ static void motion_filter_tick(void *data, float seconds)
 			var->elapsed_time += seconds;
 	}
 
-	if (!filter->hotkey_init) {
+
+	//Some APIs are not valid during creation , do initlize in tick loop
+	if (!filter->initialize) {
 		register_trigger_event(data);
-		filter->hotkey_init = true;
+		obs_data_t* settings = obs_source_get_settings(filter->context);
+		motion_filter_save(data, settings);
+		obs_data_release(settings);
+		filter->initialize = true;
 	}
 }
 
@@ -693,7 +760,7 @@ static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
 	
 	filter->context = context;
 	filter->motion_start = false;
-	filter->hotkey_init = false;
+	filter->initialize = false;
 	filter->motion_behavior = BEHAVIOR_ROUND_TRIP;
 	filter->path_type = PATH_LINEAR;
 	filter->hotkey_id_f = OBS_INVALID_HOTKEY_ID;
@@ -706,6 +773,7 @@ static void *motion_filter_create(obs_data_t *settings, obs_source_t *context)
 static void motion_filter_remove(void *data, obs_source_t *source)
 {
 	motion_filter_data_t *filter = data;
+	unregister_trigger_event(data);
 	recover_source(filter);
 	UNUSED_PARAMETER(source);
 }
