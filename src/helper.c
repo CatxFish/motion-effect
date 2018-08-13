@@ -95,7 +95,7 @@ void set_item_scale(obs_sceneitem_t *item, int width, int height)
  * A program scene is a private source without name. 
 */
 
-inline bool is_program_scene(obs_source_t *scene)
+bool is_program_scene(obs_source_t *scene)
 {
 	if (!obs_scene_from_source(scene))
 		return false;
