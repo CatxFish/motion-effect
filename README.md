@@ -4,7 +4,7 @@ Motion-filter is an obs-studio filter plugin for source item animation by updati
 # Features
 - Source animation (linear or bezier curve) and scaling.
 - One way (just forward) or Round trip (forward and backward) movement.
-- Trigger by hotkey.
+- Trigger by hotkey or scene switch.
 
 # Download
 See [Release Page](https://github.com/CatxFish/motion-filter/releases)
@@ -28,10 +28,11 @@ First follow build procedures for [obs-studio](https://github.com/obsproject/obs
 
 - Assuming you have cmake, prior to first configure, add the following entries:
 
-| Entry name         | Type     | Value (e.g.)                |
-|--------------------|----------|-----------------------------|
-| LIBOBS_LIB         | FILEPATH | /obs-studio/path/to/obs.lib |
-| LIBOBS_INCLUDE_DIR | PATH     | /obs-studio/libobs          |
+| Entry name         | Type     | Value (e.g.)                                         |
+|--------------------|----------|------------------------------------------------------|
+| LIBOBS_LIB         | FILEPATH | /obs-studio/path/to/obs.lib                          |
+| LIBOBS_INCLUDE_DIR | PATH     | /obs-studio/libobs                                   |
+| OBS_FRONTEND_LIB   | FILEPATH | /obs-studio/UI/obs-frontend-api/obs-frontend-api.lib |
 
 - Click 'Configure', which will run
 - Click 'Generate'
