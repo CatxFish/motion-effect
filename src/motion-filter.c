@@ -327,6 +327,7 @@ static void scene_change(enum obs_frontend_event event, void *data)
 		if (self_name && strcmp(self_name, cur_name)==0) {
 			motion_init(data, true);
 		}
+		obs_data_release(settings);
 	} else {
 		filter->motion_start = false;
 		filter->motion_end = true;
