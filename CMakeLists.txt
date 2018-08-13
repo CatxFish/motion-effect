@@ -12,9 +12,24 @@ set(motion-filter_HEADERS
 	src/helper.h
 	)	
 	
+include_directories(
+	"${LIBOBS_INCLUDE_DIR}/../UI/obs-frontend-api")	
+	
 add_library(motion-filter MODULE
 	${motion-filter_SOURCES}
 	${motion-filter_HEADERS})
 	
 target_link_libraries(motion-filter
 	libobs)
+	
+	
+if(WIN32)
+	set(OBS_FRONTEND_LIB "OBS_FRONTEND_LIB-NOTFOUND" CACHE FILEPATH "OBS frontend library")
+	if(OBS_FRONTEND_LIB EQUAL "OBS_FRONTEND_LIB-NOTFOUND")
+		message(FATAL_ERROR "OBS_FRONTEND_LIB NOTFOUND")
+	endif()
+	
+		target_link_libraries(motion-filter
+		"${OBS_FRONTEND_LIB}")
+				
+endif()

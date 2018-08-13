@@ -53,8 +53,7 @@ enum {
 #define S_START_W           "start_w"
 #define S_START_H           "start_h"
 #define S_PATH_TYPE         "path_type"
-#define S_START_POS         "start_position"
-#define S_START_SCALE       "start_scale"
+#define S_START_SETTING     "start_setting"
 #define S_CTRL_X            "ctrl_x"
 #define S_CTRL_Y            "ctrl_y"
 #define S_CTRL2_X           "ctrl2_x"
@@ -65,6 +64,7 @@ enum {
 #define S_DST_H             "dst_h"
 #define S_USE_DST_SCALE     "dst_use_scale"
 #define S_DURATION          "duration"
+#define S_ACCELERATION      "acceleration"
 #define S_SOURCE            "source_id"
 #define S_FORWARD           "forward"
 #define S_BACKWARD          "backward"
@@ -79,8 +79,7 @@ enum {
 #define T_PATH_LINEAR       T_("PathType.Linear")
 #define T_PATH_QUADRATIC    T_("PathType.Quadratic")
 #define T_PATH_CUBIC        T_("PathType.Cubic")
-#define T_START_POS         T_("Start.GivenPosition")
-#define T_START_SCALE       T_("Start.GivenScale")
+#define T_START_SETTING     T_("Start.Setting")
 #define T_START_X           T_("Start.X")
 #define T_START_Y           T_("Start.Y")
 #define T_START_W           T_("Start.W")
@@ -93,8 +92,8 @@ enum {
 #define T_DST_Y             T_("Destination.Y")
 #define T_DST_W             T_("Destination.W")
 #define T_DST_H             T_("Destination.H")
-#define T_USE_DST_SCALE     T_("ChangeScale")
 #define T_DURATION          T_("Duration")
+#define T_ACCELERATION      T_("Acceleration")
 #define T_SOURCE            T_("SourceName")
 #define T_FORWARD           T_("Forward")
 #define T_BACKWARD          T_("Backward")
@@ -117,9 +116,11 @@ struct variation_data {
 	float               point_y[4];
 	float               scale_x[2];
 	float               scale_y[2];
+	float               coeff[3];
 	struct vec2         scale;
 	struct vec2         position;	
 	float               elapsed_time;
+	bool                coeff_varaite;
 };
 
 struct motion_filter_data {
@@ -148,6 +149,7 @@ struct motion_filter_data {
 	struct vec2         ctrl2_pos;
 	struct vec2         dst_pos;
 	float               duration;
+	float               acceleration;
 	char                *item_name;
 	int64_t             item_id;
 };
@@ -182,6 +184,7 @@ static void update_variation_data(motion_filter_data_t *filter)
 			var->scale_x[0] = info.scale.x;
 			var->scale_y[0] = info.scale.y;
 		}
+
 	}
 
 	if (filter->use_start_position){
@@ -209,6 +212,14 @@ static void update_variation_data(motion_filter_data_t *filter)
 
 	cal_scale(filter->item, &var->scale_x[1],
 		&var->scale_y[1], filter->dst_width, filter->dst_height);
+
+	if (filter->acceleration != 0) {
+		var->coeff_varaite = true;
+		var->coeff[0] = 0.0f;
+		var->coeff[1] = (-(filter->acceleration) + 1.0f) / 2;
+		var->coeff[2] = 1.0f;
+	} else
+		var->coeff_varaite = false;
 
 	var->elapsed_time = 0.0f;
 	return ;
@@ -317,6 +328,8 @@ static void scene_change(enum obs_frontend_event event, void *data)
 			motion_init(data, true);
 		}
 	} else {
+		filter->motion_start = false;
+		filter->motion_end = true;
 		recover_source(filter);
 	}
 	obs_source_release(cur_scene);
@@ -361,7 +374,7 @@ static void motion_filter_save(void *data, obs_data_t *settings)
 static void motion_filter_update(void *data, obs_data_t *settings)
 {
 	motion_filter_data_t *filter = data;
-	bool use_start, change_pos, change_size;
+	bool use_start, change_pos, change_size, scene_switch;
 	int var_type;
 	int64_t item_id;
 	const char *item_name;
@@ -381,16 +394,18 @@ static void motion_filter_update(void *data, obs_data_t *settings)
 	filter->dst_pos.y = (float)obs_data_get_int(settings, S_DST_Y);
 	filter->dst_width = (int)obs_data_get_int(settings, S_DST_W);
 	filter->dst_height = (int)obs_data_get_int(settings, S_DST_H);
-	use_start = obs_data_get_bool(settings, S_START_POS);
+	filter->acceleration = (float)obs_data_get_double(settings, S_ACCELERATION);
+	use_start = obs_data_get_bool(settings, S_START_SETTING);
 	var_type = (int)obs_data_get_int(settings, S_VARIATION_TYPE);
 	item_name = obs_data_get_string(settings, S_SOURCE);
 	item_id = get_item_id(filter->context, item_name);
 
 	change_pos = (var_type & VARIATION_POSITION) != 0;
 	change_size = (var_type & VARIATION_SIZE) != 0;
+	scene_switch = filter->motion_behavior == BEHAVIOR_SCENE_SWITCH;
 
-	filter->use_start_position = use_start && change_pos;
-	filter->use_start_scale = use_start && change_size;
+	filter->use_start_position = (scene_switch || use_start) && change_pos;
+	filter->use_start_scale = (scene_switch || use_start) && change_size;
 	filter->change_position = change_pos;
 	filter->change_size = change_size;
 
@@ -523,12 +538,12 @@ static bool properties_set_vis(void *data, obs_properties_t *props,
 	int trigger_type = (int)obs_data_get_int(s, S_MOTION_BEHAVIOR);
 	int var_type = (int)obs_data_get_int(s, S_VARIATION_TYPE);
 	int path_type = (int)obs_data_get_int(s, S_PATH_TYPE);
-	bool use_start = obs_data_get_bool(s, S_START_POS);
+	bool use_start = obs_data_get_bool(s, S_START_SETTING);
 	bool change_pos = (var_type & VARIATION_POSITION) != 0;
 	bool change_size = (var_type & VARIATION_SIZE) != 0;
 	bool scene_switch = trigger_type == BEHAVIOR_SCENE_SWITCH;
 
-	set_visibility(S_START_POS, !scene_switch);
+	set_visibility(S_START_SETTING, !scene_switch);
 	set_visibility(S_START_X, change_pos && (use_start || scene_switch));
 	set_visibility(S_START_Y, change_pos && (use_start || scene_switch));
 	set_visibility(S_DST_X, change_pos);
@@ -558,8 +573,8 @@ static bool motion_behavior_changed(void *data, obs_properties_t *props,
 		filter->motion_behavior = behavior;
 		register_trigger_event(data);
 		properties_set_vis(data, props, p, s);
+		return motion_set_button(props, p, false);
 	}
-
 	return false;
 }
 
@@ -576,15 +591,20 @@ static bool dest_grab_current_position_clicked(obs_properties_t *props,
 
 	if (item) {
 		struct obs_transform_info info;
+		int width, height;
 		obs_sceneitem_get_info(item, &info);
+		cal_size(item, info.scale.x, info.scale.y, &width, &height);
 		// Set setting property values to match the source's current position
 		obs_data_t *settings = obs_source_get_settings(filter->context);
-		obs_data_set_double(settings, S_DST_X, info.pos.x);
-		obs_data_set_double(settings, S_DST_Y, info.pos.y);
+		obs_data_set_int(settings, S_DST_X, (int)info.pos.x);
+		obs_data_set_int(settings, S_DST_Y, (int)info.pos.y);
+		obs_data_set_int(settings, S_DST_W, width);
+		obs_data_set_int(settings, S_DST_H, height);
 		obs_data_release(settings);
+		return true;
 	}
 
-	return true;
+	return false;
 }
 
 #undef set_visibility
@@ -598,6 +618,7 @@ static obs_properties_t *motion_filter_properties(void *data)
 	motion_filter_data_t *filter = data;
 	obs_properties_t *props = obs_properties_create();
 	obs_property_t *p;
+	struct dstr disable_str = { 0 };
 
 	obs_source_t *source = obs_filter_get_parent(filter->context);
 	obs_scene_t *scene = obs_scene_from_source(source);
@@ -608,7 +629,6 @@ static obs_properties_t *motion_filter_properties(void *data)
 	p = obs_properties_add_list(props, S_SOURCE, T_SOURCE,
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 
-	struct dstr disable_str = { 0 };
 	dstr_copy(&disable_str, "--- ");
 	dstr_cat(&disable_str, T_DISABLED);
 	dstr_cat(&disable_str, " ---");
@@ -638,7 +658,7 @@ static obs_properties_t *motion_filter_properties(void *data)
 		VARIATION_POSITION | VARIATION_SIZE);
 	obs_property_set_modified_callback2(p, properties_set_vis, filter);
 
-	p = obs_properties_add_bool(props, S_START_POS, T_START_POS);
+	p = obs_properties_add_bool(props, S_START_SETTING, T_START_SETTING);
 	obs_property_set_modified_callback2(p, properties_set_vis,filter);
 
 	// Custom starting X and Y values
@@ -657,12 +677,14 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_property_list_add_int(p, T_PATH_CUBIC, PATH_CUBIC);
 	obs_property_set_modified_callback2(p, properties_set_vis,filter);
 
-	// Destination X and Y values
-	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
-	obs_properties_add_int(props, S_DST_Y, T_DST_Y, -8192, 8192, 1);
 	// Button that pre-populates destination position with the source's current position
 	obs_properties_add_button(props, S_DEST_GRAB_POS, T_DEST_GRAB_POS,
 		dest_grab_current_position_clicked);
+
+	// Destination X and Y values
+	obs_properties_add_int(props, S_DST_X, T_DST_X, -8192, 8192, 1);
+	obs_properties_add_int(props, S_DST_Y, T_DST_Y, -8192, 8192, 1);
+
 
 	// Other control point fields for other types
 	obs_properties_add_int(props, S_CTRL_X, T_CTRL_X, -8192, 8192, 1);
@@ -678,6 +700,10 @@ static obs_properties_t *motion_filter_properties(void *data)
 	obs_properties_add_float_slider(props, S_DURATION, T_DURATION, 0, 5, 
 		0.1);
 
+	// Animation acceleration slider
+	obs_properties_add_float_slider(props, S_ACCELERATION, T_ACCELERATION, -1, 
+		1, 0.01);
+
 	// Forwards / Backwards button(s)
 	p = obs_properties_add_button(props, S_FORWARD, T_FORWARD, forward_clicked);
 	obs_property_set_visible(p, !is_reverse(filter));
@@ -692,21 +718,23 @@ static void cal_variation(motion_filter_data_t *filter)
 	variation_data_t *var = &filter->variation;
 
 	float elapsed_time = min(filter->duration, var->elapsed_time);
-	float percent;
+	float coeff;
 	int order;
 
 	if (filter->duration <= 0)
-		percent = 1.0f;
+		coeff = 1.0f;
 	else if (is_reverse(filter)) 
-		percent = 1.0f - (elapsed_time / filter->duration);
+		coeff = 1.0f - (elapsed_time / filter->duration);
 	else 
-		percent = elapsed_time / filter->duration;
+		coeff = elapsed_time / filter->duration;
 
+	if (var->coeff_varaite)
+		coeff = bezier(var->coeff, coeff, 2);
 
 	order = filter->change_size ? 1 : 0;
 	
-	var->scale.x = bezier(var->scale_x, percent, order);
-	var->scale.y = bezier(var->scale_y, percent, order);
+	var->scale.x = bezier(var->scale_x, coeff, order);
+	var->scale.y = bezier(var->scale_y, coeff, order);
 
 
 	if (!filter->change_position)
@@ -718,8 +746,8 @@ static void cal_variation(motion_filter_data_t *filter)
 	else 
 		order = 1;
 
-	var->position.x = bezier(var->point_x, percent, order);
-	var->position.y = bezier(var->point_y, percent, order);
+	var->position.x = bezier(var->point_x, coeff, order);
+	var->position.y = bezier(var->point_y, coeff, order);
 }
 
 static void motion_filter_tick(void *data, float seconds)
@@ -788,10 +816,9 @@ static void motion_filter_destroy(void *data)
 static void motion_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_bool(settings, S_MOTION_END, false);
-	obs_data_set_default_int(settings, S_MOTION_BEHAVIOR, BEHAVIOR_NONE);
+	obs_data_set_default_int(settings, S_MOTION_BEHAVIOR, BEHAVIOR_ROUND_TRIP);
 	obs_data_set_default_double(settings, S_DURATION, 1.0);
 }
-
 
 static const char *motion_filter_get_name(void *unused)
 {

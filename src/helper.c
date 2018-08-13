@@ -113,16 +113,18 @@ obs_hotkey_id register_hotkey(obs_source_t *context, obs_source_t *scene,
 	const char *name, const char *text, obs_hotkey_func func, void *data)
 {
 	const char *source_name = obs_source_get_name(context);
+	const char *description;
 	obs_data_t *settings = obs_source_get_settings(context);
-	
 	obs_data_array_t *save_array;
 	struct dstr str = { 0 };
+	obs_hotkey_id id;
+
+
 	dstr_copy(&str, text);
 	dstr_cat(&str, " [ %1 ] ");
 	dstr_replace(&str, "%1", source_name);
-	const char *description = str.array;
-	obs_hotkey_id id;
-
+	description = str.array;
+	
 	if (is_program_scene(scene)) {
 		id = obs_hotkey_register_frontend(description, description, func,
 			data);
@@ -155,10 +157,10 @@ void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	obs_data_array_release(save_array);
 }
 
-float bezier(float point[], float percent, int order)
+float bezier(float point[], float coefficient, int order)
 {
-	float p = 1.0f - percent;
-	float t = percent;
+	float p = 1.0f - coefficient;
+	float t = coefficient;
 
 	if (order < 1)
 		return point[0];
