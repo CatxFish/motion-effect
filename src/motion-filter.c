@@ -848,7 +848,10 @@ struct obs_source_info motion_filter = {
 	.filter_remove = motion_filter_remove
 };
 
+extern struct obs_source_info motion_transition;
+
 bool obs_module_load(void) {
 	obs_register_source(&motion_filter);
+	obs_register_source(&motion_transition);
 	return true;
 }
