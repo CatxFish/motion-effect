@@ -47,3 +47,8 @@ void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	const char *name);
 
 float bezier(float point[], float percent, int order);
+
+void vec_linear(struct vec2 a, struct vec2 b, struct vec2 *result, float t);
+
+void vec_bezier(struct vec2 a, struct vec2 b, struct vec2 c,
+	struct vec2 *result, float t);

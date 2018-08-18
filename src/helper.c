@@ -171,4 +171,19 @@ float bezier(float point[], float coefficient, int order)
 		t * bezier(&point[1], t, order - 1);
 }
 
+void vec_linear(struct vec2 a, struct vec2 b,  struct vec2 *result ,float t)
+{
+	float x[2] = { a.x, b.x };
+	float y[2] = { a.y, b.y };
+	result->x = bezier(x, t, 1);
+	result->y = bezier(y, t, 1);
+}
 
+void vec_bezier(struct vec2 a, struct vec2 b,  struct vec2 c ,
+	struct vec2 *result, float t)
+{
+	float x[3] = { a.x,b.x,c.x };
+	float y[3] = { a.y,b.y,c.y };
+	result->x = bezier(x, t, 2);
+	result->y = bezier(y, t, 2);
+}

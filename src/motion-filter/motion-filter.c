@@ -23,7 +23,7 @@
 #include <obs-scene.h>
 #include <obs-frontend-api.h>
 #include <util/dstr.h>
-#include "helper.h"
+#include "../helper.h"
 
 // Define property keys
 
@@ -831,7 +831,7 @@ static const char *motion_filter_get_name(void *unused)
 }
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("motion-filter", "en-US")
+OBS_MODULE_USE_DEFAULT_LOCALE("motion-transitions", "en-US")
 
 struct obs_source_info motion_filter = {
 	.id = "motion-filter",
@@ -848,10 +848,8 @@ struct obs_source_info motion_filter = {
 	.filter_remove = motion_filter_remove
 };
 
-extern struct obs_source_info motion_transition;
-
 bool obs_module_load(void) {
 	obs_register_source(&motion_filter);
-	obs_register_source(&motion_transition);
 	return true;
 }
+
