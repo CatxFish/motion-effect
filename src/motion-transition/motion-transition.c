@@ -340,7 +340,7 @@ static const char *motion_transition_get_name(void *unused)
 }
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("motion-transitions", "en-US")
+OBS_MODULE_USE_DEFAULT_LOCALE("motion-transition", "en-US")
 
 struct obs_source_info motion_transition = {
 	.id = "motion-transition",

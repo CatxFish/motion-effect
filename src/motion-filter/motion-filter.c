@@ -831,7 +831,7 @@ static const char *motion_filter_get_name(void *unused)
 }
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("motion-transitions", "en-US")
+OBS_MODULE_USE_DEFAULT_LOCALE("motion-filter", "en-US")
 
 struct obs_source_info motion_filter = {
 	.id = "motion-filter",
