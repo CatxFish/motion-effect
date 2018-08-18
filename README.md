@@ -26,7 +26,7 @@ See [Release Page](https://github.com/CatxFish/motion-effect/releases)
 - Go to hotkeys page in OBS settings and set hotkey(s) for the motion(s) within the scene.
 - That's everything!
 ### motion-transition
-- Add to your transition list then switch theme, just this one.
+- Add to your transition list then switch scene, just this one.
 
 ## Build
 ### Windows
