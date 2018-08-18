@@ -207,7 +207,7 @@ static void update_variation_data(motion_filter_data_t *filter)
 
 	if(filter->use_start_scale) {
 		cal_scale(filter->item, &var->scale_x[0],
-			&var->scale_y[0], filter->org_width, filter->org_width);
+			&var->scale_y[0], filter->org_width, filter->org_height);
 	}
 
 	cal_scale(filter->item, &var->scale_x[1],
@@ -324,7 +324,7 @@ static void scene_change(enum obs_frontend_event event, void *data)
 		settings = obs_source_get_settings(filter->context);
 		self_name = obs_data_get_string(settings, S_SCENE_NAME);
 		cur_name = obs_source_get_name(cur_scene);
-		if (self_name && strcmp(self_name, cur_name)==0) {
+		if (self_name && cur_name && strcmp(self_name, cur_name)==0) {
 			motion_init(data, true);
 		}
 		obs_data_release(settings);
@@ -501,7 +501,7 @@ static bool source_changed(void *data, obs_properties_t *props,
 	motion_filter_data_t* filter = data;
 	const char* name = obs_data_get_string(s, S_SOURCE);
 	
-	if (!filter->item_name)
+	if (!filter->item_name ||!name)
 		return false;
 	else if (strcmp(filter->item_name, name) == 0)
 		return false;
