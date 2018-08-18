@@ -1,26 +1,34 @@
-# motion-filter
-Motion-filter is an obs-studio filter plugin for source item animation by updating transform settings.
+# motion-effect
+Motion-effect is an obs-studio plugin for source item animation by updating transform settings.
 
-# Features
+## Features
+### motion-filter
 - Source animation (linear or bezier curve) and scaling.
 - One way (just forward) or Round trip (forward and backward) movement.
 - Trigger by hotkey or scene switch.
+### motion-transition
+- Source in both scene : linear animation
+- Source only in previous scene :  Zoom out to dissapear
+- Source only in next scene : Zoom in
 
-# Download
-See [Release Page](https://github.com/CatxFish/motion-filter/releases)
+## Download
+See [Release Page](https://github.com/CatxFish/motion-effect/releases)
 
-# Screenshots
-![Linear](https://github.com/CatxFish/motion-filter/blob/master/img/motion.gif)
-![Multiple](https://github.com/CatxFish/motion-filter/blob/master/img/motion3.gif)
+## Screenshots
+![Transition](https://github.com/CatxFish/motion-effect/blob/master/img/transition.gif)
+![Multiple Filter](https://github.com/CatxFish/motion-effect/blob/master/img/motion3.gif)
 
-# Usage
+## Usage
+### motion-filter
 - Add a motion filter to a **scene** (this filter won't work if applied directly to a source). If you want two-way movement, make sure you choose the _Motion-filter (Round trip)_ variant of the filter.
 - On the filter property page, choose the source you wish to animate and provide the control points for the animation.
 - Use the Forward (and Backward) toggle button to check the results.
 - Go to hotkeys page in OBS settings and set hotkey(s) for the motion(s) within the scene.
 - That's everything!
+### motion-transition
+- Add to your transition list then switch theme, just this one.
 
-# Build
+## Build
 ### Windows
 First follow build procedures for [obs-studio](https://github.com/obsproject/obs-studio/wiki/install-instructions#windows-build-directions).
 
