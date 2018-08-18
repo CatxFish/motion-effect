@@ -8,8 +8,8 @@ Motion-effect is an obs-studio plugin for source item animation by updating tran
 - Trigger by hotkey or scene switch.
 ### motion-transition
 - Source in both scene : linear animation
-- Source only in previous scene :  Zoom out to dissapear
-- Source only in next scene : Zoom in
+- Source only in previous scene :  zoom out to dissapear
+- Source only in next scene : zoom in
 
 ## Download
 See [Release Page](https://github.com/CatxFish/motion-effect/releases)
