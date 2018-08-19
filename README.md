@@ -16,7 +16,6 @@ See [Release Page](https://github.com/CatxFish/motion-effect/releases)
 
 ## Screenshots
 ![Transition](https://github.com/CatxFish/motion-effect/blob/master/img/transition.gif)
-![Multiple Filter](https://github.com/CatxFish/motion-effect/blob/master/img/motion3.gif)
 
 ## Usage
 ### motion-filter
