@@ -2,11 +2,11 @@
 Motion-effect is an obs-studio plugin for source item animation by updating transform settings.
 
 ## Features
-### motion-filter (For one source in the scene)
+### motion-filter (animate one source in the scene)
 - Source animation (linear or bezier curve) and scaling.
 - One way (just forward) or Round trip (forward and backward) movement.
 - Trigger by hotkey or scene switch.
-### motion-transition (For all sources between scene switch)
+### motion-transition (animate all sources between scene switch)
 - Source in both scene : linear transform animation
 - Source only in previous scene :  zoom out
 - Source only in next scene : zoom in
