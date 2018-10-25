@@ -1,6 +1,5 @@
 /*
-*	motion-filter, an OBS-Studio filter plugin for animating sources using
-*	transform manipulation on the scene.
+*	motion-effect, an OBS-Studio plugin for animating sources
 *	Copyright(C) <2018>  <CatxFish>
 *
 *	This program is free software; you can redistribute it and/or modify
@@ -24,7 +23,7 @@
 #include <obs-scene.h>
 
 enum variation_type {
-	VARIATION_MOVING = 0,
+	VARIATION_MOTION = 0,
 	VARIATION_ZOOMOUT = 1,
 	VARIATION_ZOOMIN = 2
 };
@@ -43,14 +42,14 @@ typedef struct list_info list_info_t;
 typedef struct transition_data transition_data_t;
 
 struct moving_item {
-	obs_sceneitem_t     *item;
-	enum variation_type type;
-	struct vec2         start_pos;
-	struct vec2         start_scale;
-	struct vec2         control_pos;
-	struct vec2         end_pos;
-	struct vec2         end_scale;
-	moving_item_t       *next;
+	obs_sceneitem_t           *item;
+	enum variation_type       type;
+	struct obs_transform_info start_info;
+	struct obs_transform_info end_info;
+	struct obs_sceneitem_crop start_crop;
+	struct obs_sceneitem_crop end_crop;
+	struct vec2               control_pos;
+	moving_item_t             *next;
 };
 
 struct list_info {
@@ -71,52 +70,63 @@ struct transition_data {
 	bool                transitioning;
 };
 
-static bool append_item_list(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
+static bool append_item_list(obs_scene_t *scene, obs_sceneitem_t *item_a, void *data)
 {
-	transition_data_t* tr = data;
+	transition_data_t *tr = data;
 	bool transition_out = tr->out_list.scene == scene;
-	list_info_t* list = transition_out ? &tr->out_list : &tr->in_list;
-	list_info_t* list_cmp = transition_out ? &tr->in_list : &tr->out_list;
-	struct obs_transform_info info_a;
-	struct obs_transform_info info_b;
-	obs_source_t *item_a = obs_sceneitem_get_source(item);
+	bool transform_variation = false;
+	list_info_t *list, *list_cmp;
+	struct obs_transform_info *info_a, *info_b;
+	struct obs_sceneitem_crop *crop_a, *crop_b;
+	obs_source_t *source_a = obs_sceneitem_get_source(item_a);
 	obs_sceneitem_t *item_b;
 	moving_item_t *next = bzalloc(sizeof(*next));
 
-	obs_sceneitem_get_info(item, &info_a);
+	if (transition_out) {
+		list = &tr->out_list;
+		list_cmp = &tr->in_list;
+		info_a = &next->start_info;
+		info_b = &next->end_info;
+		crop_a = &next->start_crop;
+		crop_b = &next->end_crop;
+	} else {
+		list = &tr->in_list;
+		list_cmp = &tr->out_list;
+		info_a = &next->end_info;
+		info_b = &next->start_info;
+		crop_a = &next->end_crop;
+		crop_b = &next->start_crop;
+	}
+
+	obs_sceneitem_get_info(item_a, info_a);
+	obs_sceneitem_get_crop(item_a, crop_a);
 	item_b = obs_scene_find_source(list_cmp->scene, 
-		obs_source_get_name(item_a));
+		obs_source_get_name(source_a));
+
 
 	if (item_b) {
+		obs_sceneitem_get_info(item_b, info_b);
+		obs_sceneitem_get_crop(item_b, crop_b);
+		transform_variation = same_transform_type(info_a, info_b);
+	}
+
+	if (transform_variation) {
 		float t = transition_out ? tr->acc_x : 1 - tr->acc_x;
 		float f = transition_out ? tr->acc_y : 1 - tr->acc_y;
-		obs_sceneitem_get_info(item_b, &info_b);
-		next->control_pos.x = (1 - t) * info_a.pos.x + t * info_b.pos.x;
-		next->control_pos.y = (1 - f) * info_a.pos.y + f * info_b.pos.y;
-		next->type = VARIATION_MOVING;
+		next->control_pos.x = (1 - t) * info_a->pos.x + t * info_b->pos.x;
+		next->control_pos.y = (1 - f) * info_a->pos.y + f * info_b->pos.y;
+		next->type = VARIATION_MOTION;
 	} else {
-		float w = obs_source_get_base_width(item_a) * info_a.scale.x;
-		float h = obs_source_get_base_height(item_a) * info_a.scale.y;
-		info_b.pos.x = info_a.pos.x + w / 2;
-		info_b.pos.y = info_a.pos.y + h / 2;
-		info_b.scale.x = 0;
-		info_b.scale.y = 0;
+		float w = obs_source_get_base_width(source_a) * info_a->scale.x;
+		float h = obs_source_get_base_height(source_a) * info_a->scale.y;
+		info_b->pos.x = info_a->pos.x + w / 2;
+		info_b->pos.y = info_a->pos.y + h / 2;
+		info_b->scale.x = 0;
+		info_b->scale.y = 0;
 		next->type = transition_out ? VARIATION_ZOOMOUT : VARIATION_ZOOMIN;
 	}
 
-	next->item = item;
-	if (transition_out) {
-		vec2_copy(&next->start_pos, &info_a.pos);
-		vec2_copy(&next->start_scale, &info_a.scale);
-		vec2_copy(&next->end_pos, &info_b.pos);
-		vec2_copy(&next->end_scale, &info_b.scale);
-	}
-	else {
-		vec2_copy(&next->start_pos, &info_b.pos);
-		vec2_copy(&next->start_scale, &info_b.scale);
-		vec2_copy(&next->end_pos, &info_a.pos);
-		vec2_copy(&next->end_scale, &info_a.scale);
-	}
+	next->item = item_a;
 
 	if (list->last_item)
 		list->last_item->next = next;
@@ -151,22 +161,33 @@ static void update_item_information(moving_item_t *mv, float time)
 {
 	struct vec2 pos;
 	struct vec2 scale;
+	struct vec2 bounds;
+	struct obs_sceneitem_crop crop;
+	float rot;
 	float t;
 
 	while(mv) {
 
-		if (mv->type == VARIATION_MOVING) {
+		if (mv->type == VARIATION_MOTION) {
 			t = time;
-			vec_bezier(mv->start_pos, mv->control_pos, mv->end_pos, &pos, t);
+			vec_bezier(mv->start_info.pos, mv->control_pos, mv->end_info.pos, 
+				&pos, t);
+			vec_linear(mv->start_info.bounds, mv->end_info.bounds, &bounds, t);
+			crop_linear(mv->start_crop, mv->end_crop, &crop, t);
+			rot = (1.0f - t) * mv->start_info.rot + t * mv->end_info.rot;
+			obs_sceneitem_set_bounds(mv->item, &bounds);
+			obs_sceneitem_set_crop(mv->item, &crop);
+			obs_sceneitem_set_rot(mv->item, rot);
+
 		} else if (mv->type == VARIATION_ZOOMIN) {
 			t = time * 2 - 1.0f;
-			vec_linear(mv->start_pos, mv->end_pos, &pos, t);
+			vec_linear(mv->start_info.pos, mv->end_info.pos, &pos, t);
 		} else {
 			t = time * 2;
-			vec_linear(mv->start_pos, mv->end_pos, &pos, t);
+			vec_linear(mv->start_info.pos, mv->end_info.pos, &pos, t);
 		}
 		
-		vec_linear(mv->start_scale, mv->end_scale, &scale, t);
+		vec_linear(mv->start_info.scale, mv->end_info.scale, &scale, t);
 
 		obs_sceneitem_set_pos(mv->item, &pos);
 		obs_sceneitem_set_scale(mv->item, &scale);	

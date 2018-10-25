@@ -1,5 +1,5 @@
 /*
-*	motion-filter, an OBS-Studio filter plugin for animating sources using
+*	motion-effect, an OBS-Studio plugin for animating sources using
 *	transform manipulation on the scene.
 *	Copyright(C) <2018>  <CatxFish>
 *
@@ -157,6 +157,17 @@ void save_hotkey_config(obs_hotkey_id id, obs_data_t *settings,
 	obs_data_array_release(save_array);
 }
 
+bool same_transform_type(struct obs_transform_info *info_a, 
+	struct obs_transform_info *info_b)
+{
+	if (!info_a || !info_b)
+		return false;
+	
+	return info_a->alignment == info_b->alignment &&
+		info_a->bounds_type == info_b->bounds_type &&
+		info_a->bounds_alignment == info_b->bounds_alignment;
+}
+
 float bezier(float point[], float coefficient, int order)
 {
 	float p = 1.0f - coefficient;
@@ -186,4 +197,13 @@ void vec_bezier(struct vec2 a, struct vec2 b,  struct vec2 c ,
 	float y[3] = { a.y,b.y,c.y };
 	result->x = bezier(x, t, 2);
 	result->y = bezier(y, t, 2);
+}
+
+void crop_linear(struct obs_sceneitem_crop a, struct obs_sceneitem_crop b,
+	struct obs_sceneitem_crop* result, float t)
+{
+	result->bottom = (1.0f - t) * a.bottom + t * b.bottom;
+	result->left = (1.0f - t) * a.left + t * b.left;
+	result->top = (1.0f - t) * a.top + t * b.top;
+	result->right = (1.0f - t) * a.right + t * b.right;
 }
