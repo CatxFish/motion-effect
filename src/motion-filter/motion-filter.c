@@ -354,7 +354,7 @@ static void get_reverse_info(struct motion_filter_data *filter)
 	obs_data_t *settings = obs_source_get_settings(filter->context);
 	filter->motion_end = obs_data_get_bool(settings, S_MOTION_END);
 	var->point_x[0] = (float)obs_data_get_double(settings, S_ORG_X);
-	var->point_y[0] = (float)obs_data_get_double(settings, S_ORG_X);
+	var->point_y[0] = (float)obs_data_get_double(settings, S_ORG_Y);
 	var->scale_x[0] = (float)obs_data_get_double(settings, S_ORG_W);
 	var->scale_y[0] = (float)obs_data_get_double(settings, S_ORG_H);
 	obs_data_release(settings);
