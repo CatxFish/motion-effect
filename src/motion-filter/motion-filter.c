@@ -154,13 +154,13 @@ struct motion_filter_data {
 	int64_t             item_id;
 };
 
-inline bool is_reverse(motion_filter_data_t *filter)
+static inline bool is_reverse(motion_filter_data_t *filter)
 {
 	return filter->motion_end && 
 		filter->motion_behavior == BEHAVIOR_ROUND_TRIP;
 }
 
-inline const char* get_scene_name(motion_filter_data_t *filter)
+static inline const char* get_scene_name(motion_filter_data_t *filter)
 {
 	obs_source_t* scene = obs_filter_get_parent(filter->context);
 	return obs_source_get_name(scene);
@@ -285,22 +285,22 @@ static bool motion_init(void *data, bool forward)
 	return false;
 }
 
-static bool hotkey_forward(void *data, obs_hotkey_pair_id id,
+static void hotkey_forward(void *data, obs_hotkey_pair_id id,
 	obs_hotkey_t *hotkey, bool pressed)
 {
 	UNUSED_PARAMETER(id);
 	UNUSED_PARAMETER(hotkey);
 	UNUSED_PARAMETER(pressed);
-	return motion_init(data, true);
+	motion_init(data, true);
 }
 
-static bool hotkey_backward(void *data, obs_hotkey_pair_id id,
+static void hotkey_backward(void *data, obs_hotkey_pair_id id,
 	obs_hotkey_t *hotkey, bool pressed)
 {
 	UNUSED_PARAMETER(id);
 	UNUSED_PARAMETER(hotkey);
 	UNUSED_PARAMETER(pressed);
-	return motion_init(data, false);
+	motion_init(data, false);
 }
 
 static void scene_change(enum obs_frontend_event event, void *data)
@@ -721,7 +721,7 @@ static void cal_variation(motion_filter_data_t *filter)
 {
 	variation_data_t *var = &filter->variation;
 
-	float elapsed_time = min(filter->duration, var->elapsed_time);
+	float elapsed_time = fmin(filter->duration, var->elapsed_time);
 	float coeff;
 	int order;
 
