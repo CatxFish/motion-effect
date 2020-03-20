@@ -72,6 +72,7 @@ struct transition_data {
 
 static bool append_item_list(obs_scene_t *scene, obs_sceneitem_t *item_a, void *data)
 {
+	if(!item_a->visible) return true;
 	transition_data_t *tr = data;
 	bool transition_out = tr->out_list.scene == scene;
 	bool transform_variation = false;
@@ -104,7 +105,7 @@ static bool append_item_list(obs_scene_t *scene, obs_sceneitem_t *item_a, void *
 		obs_source_get_name(source_a));
 
 
-	if (item_b) {
+	if (item_b && item_b->visible) {
 		obs_sceneitem_get_info(item_b, info_b);
 		obs_sceneitem_get_crop(item_b, crop_b);
 		transform_variation = same_transform_type(info_a, info_b);
