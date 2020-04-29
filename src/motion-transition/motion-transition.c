@@ -107,7 +107,7 @@ static bool append_item_list(obs_scene_t *scene, obs_sceneitem_t *item_a, void *
 	if (item_b) {
 		obs_sceneitem_get_info(item_b, info_b);
 		obs_sceneitem_get_crop(item_b, crop_b);
-		transform_variation = same_transform_type(info_a, info_b);
+		transform_variation = same_transform_type(info_a, info_b) && (item_a->user_visible==item_b->user_visible);
 	}
 
 	if (transform_variation) {
