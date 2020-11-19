@@ -54,7 +54,7 @@ bool cal_size(obs_sceneitem_t* item, float sx, float sy,
 	int base_height = obs_source_get_base_height(item_source);
 
 	*width = (int)(base_width * sx);
-	*height = (int)(base_width * sy);
+	*height = (int)(base_height * sy);
 
 	return true;
 }
